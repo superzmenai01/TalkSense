@@ -5,14 +5,14 @@ struct RecordView: View {
     @State private var recordingTime: TimeInterval = 0
     @State private var audioLevel: Float = -160
     
-    // 錄音會話
-    @State private var currentSessionRecordings: [SessionRecording] = []
-    @State private var sessionAccuracy: Double = 0
+    // 當前錄音
+    @State private var currentRecording: CurrentRecording?
+    @State private var isProcessing: Bool = false
     
-    // 分析狀態
-    @State private var isTranscribing: Bool = false
-    @State private var isAnalyzing: Bool = false
-    @State private var showAnalysisResult: Bool = false
+    // 累積統計
+    @State private var totalRecordings: Int = 0
+    @State private var averageAccuracy: Double = 0
+    @State private var totalDuration: TimeInterval = 0
     
     @Environment(\.dismiss) private var dismiss
     
@@ -31,45 +31,27 @@ struct RecordView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
             
+            // 累積統計
+            CumulativeStatsView(
+                totalRecordings: totalRecordings,
+                averageAccuracy: averageAccuracy,
+                totalDuration: totalDuration,
+                threshold: analysisThreshold
+            )
+            
             // 錄音時間顯示
             Text(formatTime(recordingTime))
                 .font(.system(size: 48, weight: .medium, design: .monospaced))
                 .foregroundColor(isRecording ? .red : .secondary)
             
-            // 音頻視覺化 (Bar Chart)
+            // 音頻視覺化
             AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
                 .frame(height: 80)
                 .padding(.horizontal)
             
-            // 狀態文字
-            HStack(spacing: 12) {
-                if isTranscribing {
-                    ProgressView()
-                    Text("處理中...")
-                        .foregroundColor(.secondary)
-                } else {
-                    Text(statusText)
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // 錄音會話統計
-            if !currentSessionRecordings.isEmpty {
-                SessionStatsView(recordings: currentSessionRecordings, accuracy: sessionAccuracy)
-            }
-            
-            // 結果顯示
-            if showAnalysisResult {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        ForEach(currentSessionRecordings) { recording in
-                            RecordingResultCard(recording: recording)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .frame(maxHeight: 250)
+            // 當前錄音結果
+            if let recording = currentRecording {
+                CurrentRecordingView(recording: recording)
             }
             
             Spacer()
@@ -79,10 +61,8 @@ struct RecordView: View {
                 // 錄音/停止按鈕
                 Button(action: {
                     if isRecording {
-                        // 停止錄音
-                        handleStopRecording()
+                        stopRecording()
                     } else {
-                        // 開始錄音
                         startRecording()
                     }
                 }) {
@@ -104,45 +84,27 @@ struct RecordView: View {
                 }
                 .shadow(radius: 5)
                 
-                // 繼續錄音 / 開始分析 按鈕
-                if !isRecording && !currentSessionRecordings.isEmpty && !showAnalysisResult {
+                // 分析按鈕 (當有錄音數據時顯示)
+                if !isRecording && totalRecordings > 0 {
                     VStack(spacing: 12) {
-                        // 繼續錄音按鈕
-                        Button(action: {
-                            startRecording()
-                        }) {
-                            HStack {
-                                Image(systemName: "mic.fill")
-                                Text("繼續錄音")
-                            }
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                        }
-                        
-                        // 開始分析按鈕 (需要達到閾值)
                         Button(action: {
                             performAnalysis()
                         }) {
                             HStack {
                                 Image(systemName: "brain.head.profile")
-                                Text("開始分析")
+                                Text("開始性格分析")
                             }
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(sessionAccuracy >= analysisThreshold ? Color.green : Color.gray)
+                            .background(averageAccuracy >= analysisThreshold ? Color.green : Color.gray)
                             .foregroundColor(.white)
                             .cornerRadius(12)
                         }
-                        .disabled(sessionAccuracy < analysisThreshold)
+                        .disabled(averageAccuracy < analysisThreshold)
                         
-                        // 提示文字
-                        if sessionAccuracy < analysisThreshold {
-                            Text("錄多幾次，等準確率達到 \(Int(analysisThreshold * 100))% 先好分析")
+                        if averageAccuracy < analysisThreshold {
+                            Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析\n（目前：\(Int(averageAccuracy * 100))%，需要 \(totalRecordings) 次錄音）")
                                 .font(.caption)
                                 .foregroundColor(.orange)
                                 .multilineTextAlignment(.center)
@@ -152,7 +114,7 @@ struct RecordView: View {
                 }
                 
                 // 完成按鈕
-                if showAnalysisResult {
+                if totalRecordings > 0 && currentRecording == nil && !isRecording {
                     Button(action: {
                         dismiss()
                     }) {
@@ -171,16 +133,20 @@ struct RecordView: View {
             Spacer()
         }
         .padding()
+        .onAppear {
+            loadCumulativeStats()
+        }
     }
     
     private func startRecording() {
         audioRecorder.startRecording()
         isRecording = true
         recordingTime = 0
+        currentRecording = nil
         startTimer()
     }
     
-    private func handleStopRecording() {
+    private func stopRecording() {
         let url = audioRecorder.stopRecording()
         isRecording = false
         
@@ -189,13 +155,11 @@ struct RecordView: View {
         // 保存錄音
         _ = storage.saveRecording(from: audioURL)
         
-        // 開始處理
-        isTranscribing = true
+        // 處理中
+        isProcessing = true
         
-        // 轉文字
+        // 轉文字 + 分析
         speechToText.transcribe(audioURL: audioURL)
-        
-        // 分析音頻
         audioAnalyzer.analyze(audioURL: audioURL)
         
         // 延遲獲取結果
@@ -203,45 +167,42 @@ struct RecordView: View {
             let text = speechToText.transcribedText
             let features = audioAnalyzer.audioFeatures
             
-            // 添加到會話
-            let recording = SessionRecording(
-                audioURL: audioURL,
+            // 保存分析結果
+            if let audioFeatures = features {
+                let analysis = RecordingAnalysis(
+                    recordingId: audioURL.lastPathComponent,
+                    transcribedText: text,
+                    audioFeatures: audioFeatures,
+                    accuracy: audioFeatures.confidence
+                )
+                _ = storage.saveAnalysis(analysis)
+            }
+            
+            // 更新當前錄音顯示
+            currentRecording = CurrentRecording(
                 transcribedText: text,
                 audioFeatures: features
             )
-            currentSessionRecordings.append(recording)
             
-            // 更新準確率
-            updateSessionAccuracy()
+            // 重新加載統計
+            loadCumulativeStats()
             
-            isTranscribing = false
+            isProcessing = false
         }
     }
     
-    private func updateSessionAccuracy() {
-        // 計算會話既總準確率
-        guard !currentSessionRecordings.isEmpty else {
-            sessionAccuracy = 0
-            return
-        }
+    private func loadCumulativeStats() {
+        totalRecordings = storage.getTotalAnalysesCount()
+        averageAccuracy = storage.getAverageAccuracy()
         
-        let totalAccuracy = currentSessionRecordings.reduce(0.0) { $0 + ($1.audioFeatures?.confidence ?? 0) }
-        sessionAccuracy = min(1.0, totalAccuracy / Double(currentSessionRecordings.count) * 1.5)
+        // 計算總時長
+        let analyses = storage.getAllAnalyses()
+        totalDuration = analyses.reduce(0) { $0 + ($1.audioFeatures.totalDuration) }
     }
     
     private func performAnalysis() {
-        // 呢度可以加入 MiniMax AI 分析
-        showAnalysisResult = true
-    }
-    
-    private var statusText: String {
-        if isRecording {
-            return "錄音中... 請說話"
-        } else if currentSessionRecordings.isEmpty {
-            return "點擊開始錄音"
-        } else {
-            return "已錄 \(currentSessionRecordings.count) 次，準確率 \(Int(sessionAccuracy * 100))%"
-        }
+        // TODO: 用 MiniMax AI 做深入性格分析
+        print("執行性格分析...")
     }
     
     private func formatTime(_ time: TimeInterval) -> String {
@@ -266,64 +227,53 @@ struct RecordView: View {
     }
 }
 
-// MARK: - 會話錄音數據
-struct SessionRecording: Identifiable {
-    let id = UUID()
-    let audioURL: URL
-    let transcribedText: String
-    let audioFeatures: AudioAnalyzer.AudioFeatures?
-    let createdAt: Date = Date()
-}
-
-// MARK: - 會話統計顯示
-struct SessionStatsView: View {
-    let recordings: [SessionRecording]
-    let accuracy: Double
-    
-    private let threshold: Double = 0.6
+// MARK: - 累積統計組件
+struct CumulativeStatsView: View {
+    let totalRecordings: Int
+    let averageAccuracy: Double
+    let totalDuration: TimeInterval
+    let threshold: Double
     
     var body: some View {
         VStack(spacing: 12) {
-            // 錄音次數
+            // 標題
             HStack {
-                Text("錄音次數：")
-                    .font(.headline)
-                Text("\(recordings.count) 次")
-                    .font(.title3)
-                    .fontWeight(.bold)
+                Image(systemName: "chart.bar.fill")
                     .foregroundColor(.blue)
+                Text("累積數據")
+                    .font(.headline)
+                Spacer()
+                if averageAccuracy >= threshold {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
             }
             
-            // 準確率進度條
+            // 統計數字
+            HStack(spacing: 20) {
+                StatItem(title: "錄音次數", value: "\(totalRecordings)", icon: "mic.fill", color: .blue)
+                StatItem(title: "平均準確率", value: "\(Int(averageAccuracy * 100))%", icon: "percent", color: averageAccuracy >= threshold ? .green : .orange)
+                StatItem(title: "總時長", value: "\(Int(totalDuration))秒", icon: "clock.fill", color: .purple)
+            }
+            
+            // 進度條
             VStack(spacing: 4) {
+                ProgressView(value: min(averageAccuracy, 1.0))
+                    .tint(averageAccuracy >= threshold ? .green : .orange)
+                
                 HStack {
-                    Text("準確率：")
-                        .font(.subheadline)
+                    Text("0%")
+                        .font(.caption2)
                     Spacer()
-                    Text("\(Int(accuracy * 100))%")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(accuracy >= threshold ? .green : .orange)
+                    Text("\(Int(threshold * 100))% (目標)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("100%")
+                        .font(.caption2)
                 }
-                
-                ProgressView(value: min(accuracy, 1.0))
-                    .tint(accuracy >= threshold ? .green : .orange)
-                
-                // 目標線
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(Color.red.opacity(0.5))
-                        .frame(width: 2)
-                        .position(x: geometry.size.width * threshold, y: geometry.size.height / 2)
-                }
-                .frame(height: 2)
-            }
-            
-            // 總時長
-            let totalDuration = recordings.reduce(0.0) { $0 + ($1.audioFeatures?.totalDuration ?? 0) }
-            Text("總錄音時長：\(Int(totalDuration)) 秒")
-                .font(.caption)
                 .foregroundColor(.secondary)
+            }
         }
         .padding()
         .background(Color.gray.opacity(0.1))
@@ -332,14 +282,36 @@ struct SessionStatsView: View {
     }
 }
 
-// MARK: - 單個錄音結果卡片
-struct RecordingResultCard: View {
-    let recording: SessionRecording
+struct StatItem: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+            Text(value)
+                .font(.title3)
+                .fontWeight(.bold)
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - 當前錄音結果
+struct CurrentRecordingView: View {
+    let recording: CurrentRecording
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("錄音 #\(recording.id.uuidString.prefix(8))")
+                Text("最新錄音結果")
                     .font(.headline)
                 Spacer()
                 if let features = recording.audioFeatures {
@@ -353,6 +325,7 @@ struct RecordingResultCard: View {
                 Text(recording.transcribedText)
                     .font(.body)
                     .lineLimit(3)
+                    .foregroundColor(.secondary)
             }
             
             if let features = recording.audioFeatures {
@@ -365,12 +338,18 @@ struct RecordingResultCard: View {
             }
         }
         .padding()
-        .background(Color.blue.opacity(0.05))
+        .background(Color.blue.opacity(0.1))
         .cornerRadius(8)
+        .padding(.horizontal)
     }
 }
 
-// MARK: - 音頻視覺化 (同上)
+struct CurrentRecording {
+    let transcribedText: String
+    let audioFeatures: AudioAnalyzer.AudioFeatures?
+}
+
+// MARK: - 音頻視覺化
 struct AudioVisualizerView: View {
     let audioLevel: Float
     let isRecording: Bool
