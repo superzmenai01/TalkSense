@@ -3,7 +3,6 @@ import SwiftUI
 struct RecordView: View {
     @State private var isRecording = false
     @State private var recordingTime: TimeInterval = 0
-    @State private var showSaveAlert = false
     @State private var audioLevel: Float = -160
     
     // 語音轉文字相關
@@ -14,7 +13,7 @@ struct RecordView: View {
     @State private var audioFeatures: AudioAnalyzer.AudioFeatures?
     @State private var isAnalyzing: Bool = false
     
-    // 顯示結果
+    // 結果顯示
     @State private var showResults: Bool = false
     
     @Environment(\.dismiss) private var dismiss
@@ -22,6 +21,7 @@ struct RecordView: View {
     private let audioRecorder = AudioRecorder()
     private let speechToText = SpeechToText()
     private let audioAnalyzer = AudioAnalyzer()
+    private let storage = StorageService.shared
     
     var body: some View {
         VStack(spacing: 20) {
@@ -48,7 +48,7 @@ struct RecordView: View {
                         .foregroundColor(.secondary)
                 } else if isAnalyzing {
                     ProgressView()
-                    Text("分析語音特徵中...")
+                    Text("分析中...")
                         .foregroundColor(.secondary)
                 } else {
                     Text(statusText)
@@ -80,7 +80,7 @@ struct RecordView: View {
                         // 音頻特徵結果
                         if let features = audioFeatures {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("📊 語音特徵分析：")
+                                Text("📊 音頻特徵分析：")
                                     .font(.headline)
                                     .foregroundColor(.secondary)
                                 
@@ -105,6 +105,11 @@ struct RecordView: View {
                         isRecording = false
                         showResults = false
                         
+                        // 保存錄音
+                        if let audioURL = url {
+                            _ = storage.saveRecording(from: audioURL)
+                        }
+                        
                         // 開始轉文字同分析
                         if let audioURL = url {
                             isTranscribing = true
@@ -120,8 +125,21 @@ struct RecordView: View {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [self] in
                                 isTranscribing = false
                                 isAnalyzing = false
+                                
                                 transcribedText = speechToText.transcribedText
                                 audioFeatures = audioAnalyzer.audioFeatures
+                                
+                                // 保存分析結果
+                                if let features = audioFeatures {
+                                    let analysis = RecordingAnalysis(
+                                        recordingId: audioURL.lastPathComponent,
+                                        transcribedText: transcribedText,
+                                        audioFeatures: features,
+                                        accuracy: features.confidence
+                                    )
+                                    _ = storage.saveAnalysis(analysis)
+                                }
+                                
                                 showResults = true
                             }
                         }
@@ -231,11 +249,6 @@ struct AudioFeaturesView: View {
                 FeatureBadge(title: "停頓", value: pauseText, color: .green)
                 FeatureBadge(title: "音量", value: volumeText, color: .orange)
             }
-            
-            // 詳細解釋
-            Text(getDetailedDescription())
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
         .padding(12)
         .background(Color.gray.opacity(0.1))
@@ -264,30 +277,6 @@ struct AudioFeaturesView: View {
         if features.confidence > 0.7 { return .green }
         else if features.confidence > 0.4 { return .yellow }
         else { return .red }
-    }
-    
-    private func getDetailedDescription() -> String {
-        var desc = ""
-        
-        // 語速描述
-        if features.speechRate < 100 {
-            desc += "語速較慢，可能係思考緊或者謹慎表達。"
-        } else if features.speechRate < 180 {
-            desc += "語速適中，表达自然流暢。"
-        } else {
-            desc += "語速較快，可能情緒激動或急性子。"
-        }
-        
-        // 停頓描述
-        if features.pauseRatio > 0.4 {
-            desc += "\n停頓較多，可能係思考中或謹慎表達。"
-        } else if features.pauseRatio > 0.2 {
-            desc += "\n停頓適中。"
-        } else {
-            desc += "\n停頓較少，表達流暢自信。"
-        }
-        
-        return desc
     }
 }
 
