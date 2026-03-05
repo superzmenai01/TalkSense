@@ -11,10 +11,16 @@ struct RecordView: View {
     @State private var isTranscribing: Bool = false
     @State private var showTranscriptionResult: Bool = false
     
+    // 音頻特徵分析
+    @State private var audioFeatures: AudioAnalyzer.AudioFeatures?
+    @State private var isAnalyzing: Bool = false
+    @State private var showAnalysisResult: Bool = false
+    
     @Environment(\.dismiss) private var dismiss
     
     private let audioRecorder = AudioRecorder()
     private let speechToText = SpeechToText()
+    private let audioAnalyzer = AudioAnalyzer()
     
     var body: some View {
         VStack(spacing: 20) {
@@ -33,14 +39,31 @@ struct RecordView: View {
                 .frame(height: 80)
                 .padding(.horizontal)
             
-            // 轉文字結果 (如果有)
-            if !transcribedText.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("轉換文字：")
+            // 狀態文字
+            HStack(spacing: 12) {
+                if isTranscribing {
+                    ProgressView()
+                    Text("轉換文字中...")
+                        .foregroundColor(.secondary)
+                } else if isAnalyzing {
+                    ProgressView()
+                    Text("分析語音特徵中...")
+                        .foregroundColor(.secondary)
+                } else {
+                    Text(statusText)
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    
-                    ScrollView {
+                }
+            }
+            
+            // 轉文字結果 (如果有)
+            if !transcribedText.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("📝 轉換文字：")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
                         Text(transcribedText)
                             .font(.body)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,22 +71,21 @@ struct RecordView: View {
                             .background(Color.gray.opacity(0.1))
                             .cornerRadius(8)
                     }
-                    .frame(maxHeight: 150)
                 }
+                .frame(maxHeight: 100)
                 .padding(.horizontal)
             }
             
-            // 狀態文字
-            if isTranscribing {
-                HStack {
-                    ProgressView()
-                    Text("正在轉換文字...")
+            // 音頻特徵結果 (如果有)
+            if let features = audioFeatures {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("📊 語音特徵：")
+                        .font(.headline)
                         .foregroundColor(.secondary)
+                    
+                    AudioFeaturesView(features: features)
                 }
-            } else {
-                Text(statusText)
-                    .font(.headline)
-                    .foregroundColor(.secondary)
+                .padding(.horizontal)
             }
             
             Spacer()
@@ -77,18 +99,24 @@ struct RecordView: View {
                         let url = audioRecorder.stopRecording()
                         isRecording = false
                         
-                        // 自動開始轉文字
+                        // 開始轉文字同分析
                         if let audioURL = url {
                             isTranscribing = true
+                            isAnalyzing = true
+                            
+                            // 轉文字
                             speechToText.transcribe(audioURL: audioURL)
                             
-                            // 模擬延遲獲取結果 (因為識別是異步的)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            // 分析音頻特徵
+                            audioAnalyzer.analyze(audioURL: audioURL)
+                            
+                            // 模擬延遲獲取結果
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                                 isTranscribing = false
+                                isAnalyzing = false
                                 transcribedText = speechToText.transcribedText
-                                if !transcribedText.isEmpty {
-                                    showSaveAlert = true
-                                }
+                                audioFeatures = audioAnalyzer.audioFeatures
+                                showSaveAlert = true
                             }
                         }
                     } else {
@@ -96,7 +124,8 @@ struct RecordView: View {
                         audioRecorder.startRecording()
                         isRecording = true
                         recordingTime = 0
-                        transcribedText = "" // 清空之前既結果
+                        transcribedText = ""
+                        audioFeatures = nil
                         startTimer()
                     }
                 }) {
@@ -117,23 +146,6 @@ struct RecordView: View {
                     }
                 }
                 .shadow(radius: 5)
-                
-                // 錄音完成後既提示
-                if !isRecording && recordingTime > 0 && transcribedText.isEmpty && !isTranscribing {
-                    Button("轉換為文字") {
-                        let recordings = audioRecorder.getAllRecordings()
-                        if let latestRecording = recordings.first {
-                            isTranscribing = true
-                            speechToText.transcribe(audioURL: latestRecording)
-                            
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                isTranscribing = false
-                                transcribedText = speechToText.transcribedText
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
             }
             
             Spacer()
@@ -144,8 +156,8 @@ struct RecordView: View {
                 dismiss()
             }
         } message: {
-            if !transcribedText.isEmpty {
-                Text("錄音已保存！文字已轉換。")
+            if !transcribedText.isEmpty || audioFeatures != nil {
+                Text("分析完成！")
             } else {
                 Text("錄音已保存！")
             }
@@ -181,6 +193,79 @@ struct RecordView: View {
             }
         }
         timer.resume()
+    }
+}
+
+// 音頻特徵顯示組件
+struct AudioFeaturesView: View {
+    let features: AudioAnalyzer.AudioFeatures
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // 信心指數
+            HStack {
+                Text("信心指數：")
+                    .font(.subheadline)
+                ProgressView(value: features.confidence)
+                    .tint(confidenceColor)
+                Text("\(Int(features.confidence * 100))%")
+                    .font(.subheadline)
+                    .foregroundColor(confidenceColor)
+            }
+            
+            // 特徵列表
+            HStack(spacing: 16) {
+                FeatureBadge(title: "語速", value: speedText, color: .blue)
+                FeatureBadge(title: "停頓", value: pauseText, color: .green)
+                FeatureBadge(title: "音量", value: volumeText, color: .orange)
+            }
+        }
+        .padding(12)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(8)
+    }
+    
+    private var speedText: String {
+        if features.speechRate < 100 { return "慢" }
+        else if features.speechRate < 180 { return "正常" }
+        else { return "快" }
+    }
+    
+    private var pauseText: String {
+        if features.pauseRatio > 0.4 { return "多" }
+        else if features.pauseRatio > 0.2 { return "適中" }
+        else { return "少" }
+    }
+    
+    private var volumeText: String {
+        if features.volumeVariation > 0.5 { return "大" }
+        else if features.volumeVariation > 0.2 { return "適中" }
+        else { return "穩" }
+    }
+    
+    private var confidenceColor: Color {
+        if features.confidence > 0.7 { return .green }
+        else if features.confidence > 0.4 { return .yellow }
+        else { return .red }
+    }
+}
+
+struct FeatureBadge: View {
+    let title: String
+    let value: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(color)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
