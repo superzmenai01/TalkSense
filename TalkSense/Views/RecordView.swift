@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct RecordView: View {
-    // 改用 @State 替代 @StateObject
     @State private var isRecording = false
     @State private var recordingTime: TimeInterval = 0
     @State private var showSaveAlert = false
@@ -23,9 +22,10 @@ struct RecordView: View {
                 .font(.system(size: 48, weight: .medium, design: .monospaced))
                 .foregroundColor(isRecording ? .red : .secondary)
             
-            // 心跳動畫 (有聲音時跳動)
-            HeartbeatView(audioLevel: audioLevel, isRecording: isRecording)
-                .frame(width: 120, height: 120)
+            // 音頻視覺化 (Bar Chart)
+            AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
+                .frame(height: 100)
+                .padding(.horizontal)
             
             // 狀態文字
             Text(statusText)
@@ -99,13 +99,11 @@ struct RecordView: View {
     }
     
     private func startTimer() {
-        // 使用 DispatchSourceTimer 替代 Timer
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: 0.1)
+        timer.schedule(deadline: .now(), repeating: 0.05)
         timer.setEventHandler { [self] in
             if self.isRecording {
-                self.recordingTime += 0.1
-                // 更新 audio level
+                self.recordingTime += 0.05
                 self.audioLevel = self.audioRecorder.audioLevel
             } else {
                 timer.cancel()
@@ -115,60 +113,73 @@ struct RecordView: View {
     }
 }
 
-// 心跳動畫組件
-struct HeartbeatView: View {
+// 音頻視覺化 Bar Chart
+struct AudioVisualizerView: View {
     let audioLevel: Float
     let isRecording: Bool
     
-    // 將 dB 轉換為 0-1
+    // 將 dB (-160 ~ 0) 轉換為 0 ~ 1
     private var normalizedLevel: Double {
         guard isRecording else { return 0 }
         return max(0, min(1, Double(audioLevel + 60) / 60))
     }
     
+    // 20 條 bar
+    private let barCount = 20
+    
     var body: some View {
-        ZStack {
-            // 外圈 - 基礎圓形
-            Circle()
-                .stroke(Color.blue.opacity(0.3), lineWidth: 4)
-                .frame(width: 100, height: 100)
-            
-            // 動態圈 - 根據音量擴張
-            Circle()
-                .fill(Color.blue.opacity(0.2))
-                .frame(width: dynamicSize, height: dynamicSize)
-            
-            // 內圈 - 主圓形
-            Circle()
-                .fill(Color.blue.opacity(0.4))
-                .frame(width: 60, height: 60)
-            
-            // 心跳圖標
-            Image(systemName: "heart.fill")
-                .font(.system(size: 30))
-                .foregroundColor(.red)
-                .scaleEffect(isRecording ? heartbeatScale : 1.0)
-                .animation(.easeInOut(duration: heartbeatDuration), value: isRecording)
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(0..<barCount, id: \.self) { index in
+                AudioBar(
+                    index: index,
+                    totalBars: barCount,
+                    normalizedLevel: normalizedLevel,
+                    isRecording: isRecording
+                )
+            }
+        }
+    }
+}
+
+struct AudioBar: View {
+    let index: Int
+    let totalBars: Int
+    let normalizedLevel: Double
+    let isRecording: Bool
+    
+    // 每條 bar 既高度
+    private var barHeight: CGFloat {
+        guard isRecording else { return 4 }
+        
+        // 模擬不同頻率既響應 - 中間既 bar 高啲
+        let centerIndex = totalBars / 2
+        let distanceFromCenter = abs(index - centerIndex)
+        let centerFactor = 1.0 - (Double(distanceFromCenter) / Double(centerIndex)) * 0.5
+        
+        // 加入隨機性模擬音樂既跳動
+        let randomFactor = Double.random(in: 0.7...1.3)
+        
+        let level = normalizedLevel * centerFactor * randomFactor
+        return max(4, CGFloat(level) * 100)
+    }
+    
+    // Bar 既顏色 - 低音到高音 (綠->黃->紅)
+    private var barColor: Color {
+        let ratio = Double(index) / Double(totalBars)
+        if ratio < 0.4 {
+            return .green
+        } else if ratio < 0.7 {
+            return .yellow
+        } else {
+            return .red
         }
     }
     
-    // 根據音量計算大小
-    private var dynamicSize: CGFloat {
-        guard isRecording else { return 80 }
-        let scale = 1 + normalizedLevel * 0.5 // 80 ~ 120
-        return 80 * scale
-    }
-    
-    // 心跳動畫 scale
-    private var heartbeatScale: CGFloat {
-        guard isRecording else { return 1.0 }
-        return 1.0 + CGFloat(normalizedLevel) * 0.3 // 1.0 ~ 1.3
-    }
-    
-    // 心跳動畫速度 - 聲音越大越快
-    private var heartbeatDuration: Double {
-        guard isRecording else { return 1.0 }
-        return 1.0 - normalizedLevel * 0.5 // 1.0s ~ 0.5s
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(barColor)
+            .frame(width: 12, height: barHeight)
+            .animation(.easeInOut(duration: 0.05), value: barHeight)
     }
 }
 
