@@ -8,7 +8,7 @@ class AudioRecorder: ObservableObject {
     @Published var audioLevel: Float = -160
     
     private var audioRecorder: AVAudioRecorder?
-    private var timer: Timer?
+    private var timer: DispatchSourceTimer?
     private var audioSession: AVAudioSession = .sharedInstance()
     
     // 錄音文件路徑
@@ -25,8 +25,8 @@ class AudioRecorder: ObservableObject {
     
     // 開始錄音
     func startRecording() {
-        // 請求權限 - 使用新的 API
-        AVAudioApplication.requestRecordPermission { [weak self] granted in
+        // 使用舊既 API (iOS 2.0+)
+        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
             DispatchQueue.main.async {
                 if granted {
                     self?.setupAndStartRecording()
@@ -60,25 +60,35 @@ class AudioRecorder: ObservableObject {
             recordingTime = 0
             audioLevel = -160
             
-            // 啟動定時器更新錄音時間
-            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                guard let self = self else { return }
-                self.recordingTime += 0.1
-                self.audioRecorder?.updateMeters()
-                
-                let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
-                // 確保值喺合理範圍內
-                self.audioLevel = max(-160, min(0, power))
-            }
+            // 啟動定時器
+            startTimer()
             
         } catch {
             print("Failed to start recording: \(error)")
         }
     }
     
+    private func startTimer() {
+        timer = DispatchSource.makeTimerSource(queue: .main)
+        timer?.schedule(deadline: .now(), repeating: 0.1)
+        timer?.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            if self.isRecording {
+                self.recordingTime += 0.1
+                self.audioRecorder?.updateMeters()
+                let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
+                self.audioLevel = max(-160, min(0, power))
+            } else {
+                self.timer?.cancel()
+                self.timer = nil
+            }
+        }
+        timer?.resume()
+    }
+    
     // 停止錄音
     func stopRecording() -> URL? {
-        timer?.invalidate()
+        timer?.cancel()
         timer = nil
         
         let url = audioRecorder?.url
@@ -93,7 +103,7 @@ class AudioRecorder: ObservableObject {
     
     // 取消錄音
     func cancelRecording() {
-        timer?.invalidate()
+        timer?.cancel()
         timer = nil
         
         if let url = audioRecorder?.url {
