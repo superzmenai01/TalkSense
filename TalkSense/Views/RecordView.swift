@@ -25,163 +25,158 @@ struct RecordView: View {
     private let audioAnalyzer = AudioAnalyzer()
     private let storage = StorageService.shared
     
-    // 觸發分析既準<file_content>閾值
+    // 觸發分析既準確率閾值
     private let analysisThreshold: Double = 0.6
     
     var body: some View {
-        VStack(spacing: 20) {
-            // 標題 + 重新開始按鈕
-            HStack {
-                Text("錄製語音")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+        NavigationStack {
+            VStack(spacing: 20) {
+                // 累積統計
+                CumulativeStatsView(
+                    totalRecordings: totalRecordings,
+                    averageAccuracy: averageAccuracy,
+                    totalDuration: totalDuration,
+                    threshold: analysisThreshold
+                )
+                
+                // 錄音時間顯示
+                Text(formatTime(recordingTime))
+                    .font(.system(size: 48, weight: .medium, design: .monospaced))
+                    .foregroundColor(isRecording ? .red : .secondary)
+                
+                // 音頻視覺化
+                AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
+                    .frame(height: 80)
+                    .padding(.horizontal)
+                
+                // 當前錄音結果
+                if let recording = currentRecording {
+                    CurrentRecordingView(recording: recording)
+                }
                 
                 Spacer()
                 
-                // 重新開始按鈕 - 如果有錄音數據就顯示
-                if totalRecordings > 0 {
-                    Button(action: {
-                        showResetConfirmation = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.counterclockwise")
-                            Text("重新開始")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(8)
-                    }
-                }
-            }
-            .padding(.horizontal)
-            
-            // 累積統計
-            CumulativeStatsView(
-                totalRecordings: totalRecordings,
-                averageAccuracy: averageAccuracy,
-                totalDuration: totalDuration,
-                threshold: analysisThreshold
-            )
-            
-            // 錄音時間顯示
-            Text(formatTime(recordingTime))
-                .font(.system(size: 48, weight: .medium, design: .monospaced))
-                .foregroundColor(isRecording ? .red : .secondary)
-            
-            // 音頻視覺化
-            AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
-                .frame(height: 80)
-                .padding(.horizontal)
-            
-            // 當前錄音結果
-            if let recording = currentRecording {
-                CurrentRecordingView(recording: recording)
-            }
-            
-            Spacer()
-            
-            // 按鈕區域
-            VStack(spacing: 16) {
-                // 錄音/停止按鈕 + 標籤
-                VStack(spacing: 8) {
-                    Button(action: {
-                        if isRecording {
-                            stopRecording()
-                        } else {
-                            startRecording()
-                        }
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(isRecording ? Color.red : Color.blue)
-                                .frame(width: 80, height: 80)
-                            
-                            if isRecording {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.white)
-                                    .frame(width: 24, height: 24)
-                            } else {
-                                Image(systemName: "mic.fill")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    .shadow(radius: 5)
-                    
-                    // 錄音按鈕既標籤
-                    Text(isRecording ? "停止" : "開始")
-                        .font(.headline)
-                        .foregroundColor(isRecording ? .red : .blue)
-                }
-                
-                // 分析按鈕 (當有錄音數據時顯示)
-                if !isRecording && totalRecordings > 0 {
-                    VStack(spacing: 12) {
+                // 按鈕區域
+                VStack(spacing: 16) {
+                    // 錄音/停止按鈕 + 標籤
+                    VStack(spacing: 8) {
                         Button(action: {
-                            performAnalysis()
-                        }) {
-                            HStack {
-                                Image(systemName: "brain.head.profile")
-                                Text("開始性格分析")
+                            if isRecording {
+                                stopRecording()
+                            } else {
+                                startRecording()
                             }
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(averageAccuracy >= analysisThreshold ? Color.green : Color.gray)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(isRecording ? Color.red : Color.blue)
+                                    .frame(width: 80, height: 80)
+                                
+                                if isRecording {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.white)
+                                        .frame(width: 24, height: 24)
+                                } else {
+                                    Image(systemName: "mic.fill")
+                                        .font(.system(size: 30))
+                                        .foregroundColor(.white)
+                                }
+                            }
                         }
-                        .disabled(averageAccuracy < analysisThreshold)
+                        .shadow(radius: 5)
                         
-                        if averageAccuracy < analysisThreshold {
-                            Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析\n（目前：\(Int(averageAccuracy * 100))%，需要更多錄音）")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                                .multilineTextAlignment(.center)
-                        }
+                        // 錄音按鈕既標籤
+                        Text(isRecording ? "停止" : "開始")
+                            .font(.headline)
+                            .foregroundColor(isRecording ? .red : .blue)
                     }
-                    .padding(.horizontal, 40)
+                    
+                    // 分析按鈕 (當有錄音數據時顯示)
+                    if !isRecording && totalRecordings > 0 {
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                performAnalysis()
+                            }) {
+                                HStack {
+                                    Image(systemName: "brain.head.profile")
+                                    Text("開始性格分析")
+                                }
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(averageAccuracy >= analysisThreshold ? Color.green : Color.gray)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                            }
+                            .disabled(averageAccuracy < analysisThreshold)
+                            
+                            if averageAccuracy < analysisThreshold {
+                                Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析\n（目前：\(Int(averageAccuracy * 100))%，需要更多錄音）")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        .padding(.horizontal, 40)
+                    }
+                    
+                    // 完成按鈕
+                    if totalRecordings > 0 && currentRecording == nil && !isRecording {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Text("完成")
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 40)
+                    }
                 }
                 
-                // 完成按鈕
-                if totalRecordings > 0 && currentRecording == nil && !isRecording {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Text("完成")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
+                Spacer()
+            }
+            .padding(.top, 20)
+            .navigationTitle("錄製語音")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if totalRecordings > 0 {
+                        Button(action: {
+                            print("Reset button tapped, showResetConfirmation: \(showResetConfirmation)")
+                            showResetConfirmation = true
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text("重新開始")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                        }
                     }
-                    .padding(.horizontal, 40)
                 }
             }
-            
-            Spacer()
-        }
-        .padding()
-        .onAppear {
-            loadCumulativeStats()
-        }
-        .alert("重新開始？", isPresented: $showResetConfirmation) {
-            Button("取消", role: .cancel) { }
-            Button("確認清除", role: .destructive) {
-                resetAllData()
+            .onAppear {
+                print("RecordView appeared, loading stats...")
+                loadCumulativeStats()
             }
-        } message: {
-            Text("呢個操作會清除曬所有錄音同分析記錄，唔可以復原。你確定要繼續？")
-        }
-        .alert("已清除", isPresented: $showResetSuccess) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("所有數據已經清除，你可以重新開始錄音喇！")
+            .alert("重新開始？", isPresented: $showResetConfirmation) {
+                Button("取消", role: .cancel) { }
+                Button("確認清除", role: .destructive) {
+                    print("Confirm reset tapped")
+                    resetAllData()
+                }
+            } message: {
+                Text("呢個操作會清除曬所有錄音同分析記錄，唔可以復原。你確定要繼續？")
+            }
+            .alert("已清除", isPresented: $showResetSuccess) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("所有數據已經清除，你可以重新開始錄音喇！")
+            }
         }
     }
     
@@ -190,7 +185,6 @@ struct RecordView: View {
         isRecording = true
         recordingTime = 0
         currentRecording = nil
-        loadCumulativeStats()
         startTimer()
     }
     
@@ -246,9 +240,13 @@ struct RecordView: View {
         // 計算總時長
         let analyses = storage.getAllAnalyses()
         totalDuration = analyses.reduce(0) { $0 + ($1.audioFeatures.totalDuration) }
+        
+        print("Loaded stats: \(totalRecordings) recordings, \(averageAccuracy) accuracy")
     }
     
     private func resetAllData() {
+        print("Reset function called")
+        
         // 清除所有錄音
         let recordings = storage.getAllRecordings()
         for recording in recordings {
@@ -271,7 +269,6 @@ struct RecordView: View {
     }
     
     private func performAnalysis() {
-        // TODO: 用 MiniMax AI 做深入性格分析
         print("執行性格分析...")
     }
     
