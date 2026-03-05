@@ -19,10 +19,16 @@ struct RecordView: View {
                 .font(.system(size: 48, weight: .medium, design: .monospaced))
                 .foregroundColor(audioRecorder.isRecording ? .red : .secondary)
             
-            // 音頻level indicator
-            AudioLevelView(level: audioRecorder.audioLevel, isRecording: audioRecorder.isRecording)
-                .frame(height: 20)
-                .padding(.horizontal)
+            // 音頻level indicator - 簡化版
+            HStack(spacing: 4) {
+                ForEach(0..<10, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(barColor(index: index))
+                        .frame(width: 20, height: barHeight(index: index))
+                }
+            }
+            .frame(height: 40)
+            .padding(.horizontal)
             
             // 錄音狀態文字
             Text(statusText)
@@ -36,11 +42,9 @@ struct RecordView: View {
                 isRecording: audioRecorder.isRecording,
                 action: {
                     if audioRecorder.isRecording {
-                        // 停止錄音
                         savedRecordingURL = audioRecorder.stopRecording()
                         showSaveAlert = true
                     } else {
-                        // 開始錄音
                         audioRecorder.startRecording()
                     }
                 }
@@ -54,10 +58,25 @@ struct RecordView: View {
                 dismiss()
             }
         } message: {
-            if savedRecordingURL != nil {
-                Text("錄音已保存！")
-            }
+            Text("錄音已保存！")
         }
+    }
+    
+    private func barHeight(index: Int) -> CGFloat {
+        guard audioRecorder.isRecording else { return 8 }
+        
+        let level = audioRecorder.audioLevel
+        // Normalize -160dB~0dB to 0~1
+        let normalized = max(0, min(1, (level + 60) / 60))
+        let threshold = Double(index + 1) / 10.0
+        
+        return normalized > threshold ? 40 : 8
+    }
+    
+    private func barColor(index: Int) -> Color {
+        if index < 6 { return .green }
+        if index < 8 { return .yellow }
+        return .red
     }
     
     private var statusText: String {
@@ -91,12 +110,10 @@ struct RecordButton: View {
                     .frame(width: 80, height: 80)
                 
                 if isRecording {
-                    // 停止圖標 (正方形)
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.white)
                         .frame(width: 24, height: 24)
                 } else {
-                    // 錄音圖標 (圓形)
                     Circle()
                         .fill(Color.white)
                         .frame(width: 32, height: 32)
@@ -104,44 +121,6 @@ struct RecordButton: View {
             }
         }
         .shadow(radius: 5)
-    }
-}
-
-// 音頻level顯示
-struct AudioLevelView: View {
-    let level: Float
-    let isRecording: Bool
-    
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<20, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(barColor(for: index))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: barHeight(for: index))
-            }
-        }
-    }
-    
-    private func barHeight(for index: Int) -> CGFloat {
-        guard isRecording else { return 4 }
-        
-        // 將 dB (-160 ~ 0) 轉換為 0 ~ 1
-        let normalizedLevel = max(0, min(1, (level + 60) / 60))
-        let segmentThreshold = CGFloat(index) / 20.0
-        
-        return normalizedLevel > segmentThreshold ? 20 : 4
-    }
-    
-    private func barColor(for index: Int) -> Color {
-        let ratio = Float(index) / 20.0
-        if ratio < 0.6 {
-            return .green
-        } else if ratio < 0.8 {
-            return .yellow
-        } else {
-            return .red
-        }
     }
 }
 
