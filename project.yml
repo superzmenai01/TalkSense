@@ -2,7 +2,7 @@ name: TalkSense
 options:
   bundleIdPrefix: com.talksense
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "26.0"
   xcodeVersion: "15.0"
   generateEmptyDirectories: true
 

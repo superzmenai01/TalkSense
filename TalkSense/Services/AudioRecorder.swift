@@ -25,8 +25,8 @@ class AudioRecorder: ObservableObject {
     
     // 開始錄音
     func startRecording() {
-        // 使用舊既 API (iOS 2.0+)
-        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+        // 使用 iOS 17+ API
+        AVAudioApplication.requestRecordPermission { [weak self] granted in
             DispatchQueue.main.async {
                 if granted {
                     self?.setupAndStartRecording()
