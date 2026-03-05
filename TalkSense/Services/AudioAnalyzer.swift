@@ -107,7 +107,7 @@ class AudioAnalyzer: ObservableObject {
         let zeroCrossingRate = Float(zeroCrossings) / Float(totalSamples)
         features.pitchVariation = zeroCrossingRate
         
-        // 6. 計算信心指數 (基於數據量)
+        // 6. 計算準確率 (基於數據量)
         // 錄音越長、說話越多，信心越高
         let durationScore = min(1.0, totalDuration / 60.0) // 最少1分鐘
         let speakingScore = min(1.0, speakingDuration / 30.0) // 最少30秒說話
@@ -159,9 +159,9 @@ class AudioAnalyzer: ObservableObject {
             description += "• 音調變化：平穩\n"
         }
         
-        // 信心指數
+        // 準確率
         let confidencePercent = Int(features.confidence * 100)
-        description += "• 數據信心指數：\(confidencePercent)%"
+        description += "• 數據準確率：\(confidencePercent)%"
         
         return description
     }

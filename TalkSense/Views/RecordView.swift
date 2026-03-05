@@ -214,9 +214,9 @@ struct AudioFeaturesView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // 信心指數
+            // 準確率
             HStack {
-                Text("信心指數：")
+                Text("準確率：")
                     .font(.subheadline)
                 ProgressView(value: features.confidence)
                     .tint(confidenceColor)
