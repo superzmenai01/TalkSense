@@ -8,7 +8,6 @@ struct ChartsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // 標題
                 Text("數據趨勢")
                     .font(.largeTitle)
                     .fontWeight(.bold)
@@ -18,29 +17,18 @@ struct ChartsView: View {
                 if analyses.isEmpty {
                     EmptyChartsView()
                 } else {
-                    // 總結統計
                     SummaryStatsView(analyses: analyses)
                         .padding(.horizontal)
                     
-                    // 準確率趨勢
-                    AccuracyTrendChart(analyses: analyses)
-                        .frame(height: 200)
+                    SimpleAccuracyChart(analyses: analyses)
+                        .frame(height: 180)
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
                         .padding(.horizontal)
                     
-                    // 語速趨勢
-                    SpeechRateChart(analyses: analyses)
-                        .frame(height: 200)
-                        .padding()
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                    
-                    // 停頓比例
-                    PauseRatioChart(analyses: analyses)
-                        .frame(height: 200)
+                    SimpleSpeechRateChart(analyses: analyses)
+                        .frame(height: 180)
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
@@ -73,96 +61,86 @@ struct EmptyChartsView: View {
     }
 }
 
-// MARK: - 準確率趨勢圖
-struct AccuracyTrendChart: View {
+// MARK: - 簡化版準確率圖
+struct SimpleAccuracyChart: View {
     let analyses: [RecordingAnalysis]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("準確率趨勢", systemImage: "percent")
+            Text("準確率趨勢")
                 .font(.headline)
             
-            if #available(iOS 16.0, *) {
-                Chart {
-                    ForEach(Array(analyses.enumerated()), id: \.element.id) { index, analysis in
-                        LineMark(
-                            x: .value("次數", index + 1),
-                            y: .value("準確率", analysis.accuracy * 100)
-                        )
-                        .foregroundColor(.blue)
-                        
-                        PointMark(
-                            x: .value("次數", index + 1),
-                            y: .value("準確率", analysis.accuracy * 100)
-                        )
-                        .foregroundColor(.blue)
-                    }
-                }
-                .chartYScale(domain: 0...100)
+            if analyses.count == 1 {
+                SingleAccuracyView(analysis: analyses[0])
             } else {
-                Text("需要 iOS 16+ 先可以睇到圖表")
-                    .foregroundColor(.secondary)
+                MultiAccuracyView(analyses: analyses)
             }
         }
     }
 }
 
-// MARK: - 語速趨勢圖
-struct SpeechRateChart: View {
+struct SingleAccuracyView: View {
+    let analysis: RecordingAnalysis
+    
+    var body: some View {
+        VStack {
+            Text("\(Int(analysis.accuracy * 100))%")
+                .font(.system(size: 40, weight: .bold))
+                .foregroundColor(.blue)
+            
+            ProgressView(value: analysis.accuracy)
+                .tint(.blue)
+        }
+    }
+}
+
+struct MultiAccuracyView: View {
     let analyses: [RecordingAnalysis]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("語速趨勢 (WPM)", systemImage: "waveform")
-                .font(.headline)
-            
-            if #available(iOS 16.0, *) {
-                Chart {
-                    ForEach(Array(analyses.enumerated()), id: \.element.id) { index, analysis in
-                        BarMark(
-                            x: .value("次數", "第\(index + 1)次"),
-                            y: .value("語速", analysis.audioFeatures.speechRate)
-                        )
-                        .foregroundStyle(barColor(for: analysis.audioFeatures.speechRate).gradient)
-                    }
+        VStack(spacing: 8) {
+            ForEach(Array(analyses.enumerated()), id: \.element.id) { index, analysis in
+                HStack {
+                    Text("第\(index + 1)次")
+                        .font(.caption)
+                        .frame(width: 50, alignment: .leading)
+                    
+                    ProgressView(value: analysis.accuracy)
+                        .tint(accuracyColor(analysis.accuracy))
+                    
+                    Text("\(Int(analysis.accuracy * 100))%")
+                        .font(.caption)
+                        .frame(width: 35, alignment: .trailing)
                 }
-            } else {
-                Text("需要 iOS 16+ 先可以睇到圖表")
-                    .foregroundColor(.secondary)
             }
         }
     }
     
-    private func barColor(for rate: Double) -> Color {
-        if rate < 100 { return .blue }
-        else if rate < 180 { return .green }
-        else { return .orange }
+    func accuracyColor(_ value: Double) -> Color {
+        if value >= 0.7 { return .green }
+        else if value >= 0.4 { return .orange }
+        else { return .red }
     }
 }
 
-// MARK: - 停頓比例圖
-struct PauseRatioChart: View {
+// MARK: - 簡化版語速圖
+struct SimpleSpeechRateChart: View {
     let analyses: [RecordingAnalysis]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("停頓比例", systemImage: "pause.circle")
+            Text("語速趨勢")
                 .font(.headline)
             
-            if #available(iOS 16.0, *) {
-                Chart {
-                    ForEach(Array(analyses.enumerated()), id: \.element.id) { index, analysis in
-                        BarMark(
-                            x: .value("次數", "第\(index + 1)次"),
-                            y: .value("停頓", analysis.audioFeatures.pauseRatio * 100)
-                        )
-                        .foregroundStyle(Color.purple.gradient)
-                    }
+            ForEach(Array(analyses.enumerated()), id: \.element.id) { index, analysis in
+                HStack {
+                    Text("第\(index + 1)次")
+                        .font(.caption)
+                        .frame(width: 50, alignment: .leading)
+                    
+                    Text("\(Int(analysis.audioFeatures.speechRate)) WPM")
+                        .font(.caption)
                 }
-                .chartYScale(domain: 0...100)
-            } else {
-                Text("需要 iOS 16+ 先可以睇到圖表")
-                    .foregroundColor(.secondary)
             }
         }
     }
@@ -174,12 +152,14 @@ struct SummaryStatsView: View {
     
     private var averageAccuracy: Double {
         guard !analyses.isEmpty else { return 0 }
-        return analyses.reduce(0) { $0 + $1.accuracy } / Double(analyses.count)
+        let total = analyses.reduce(0.0) { $0 + $1.accuracy }
+        return total / Double(analyses.count)
     }
     
     private var averageSpeechRate: Double {
         guard !analyses.isEmpty else { return 0 }
-        return analyses.reduce(0) { $0 + $1.audioFeatures.speechRate } / Double(analyses.count)
+        let total = analyses.reduce(0.0) { $0 + $1.audioFeatures.speechRate }
+        return total / Double(analyses.count)
     }
     
     private var totalDuration: Double {
@@ -188,39 +168,17 @@ struct SummaryStatsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("總結", systemImage: "chart.pie")
+            Text("總結")
                 .font(.headline)
             
             HStack(spacing: 20) {
-                SummaryStatItem(
-                    title: "總錄音次數",
-                    value: "\(analyses.count)",
-                    icon: "mic.fill",
-                    color: .blue
-                )
-                
-                SummaryStatItem(
-                    title: "平均準確率",
-                    value: "\(Int(averageAccuracy * 100))%",
-                    icon: "percent",
-                    color: averageAccuracy >= 0.6 ? .green : .orange
-                )
+                StatBox(title: "錄音次數", value: "\(analyses.count)", icon: "mic.fill", color: .blue)
+                StatBox(title: "平均準確率", value: "\(Int(averageAccuracy * 100))%", icon: "percent", color: averageAccuracy >= 0.6 ? .green : .orange)
             }
             
             HStack(spacing: 20) {
-                SummaryStatItem(
-                    title: "平均語速",
-                    value: "\(Int(averageSpeechRate)) WPM",
-                    icon: "waveform",
-                    color: .purple
-                )
-                
-                SummaryStatItem(
-                    title: "總錄音時長",
-                    value: "\(Int(totalDuration)) 秒",
-                    icon: "clock.fill",
-                    color: .orange
-                )
+                StatBox(title: "平均語速", value: "\(Int(averageSpeechRate))", icon: "waveform", color: .purple)
+                StatBox(title: "總時長", value: "\(Int(totalDuration))秒", icon: "clock.fill", color: .orange)
             }
         }
         .padding()
@@ -229,7 +187,7 @@ struct SummaryStatsView: View {
     }
 }
 
-struct SummaryStatItem: View {
+struct StatBox: View {
     let title: String
     let value: String
     let icon: String
