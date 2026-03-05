@@ -5,7 +5,7 @@ import Combine
 class AudioRecorder: ObservableObject {
     @Published var isRecording = false
     @Published var recordingTime: TimeInterval = 0
-    @Published var audioLevel: Float = 0
+    @Published var audioLevel: Float = -160
     
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
@@ -25,7 +25,7 @@ class AudioRecorder: ObservableObject {
     
     // 開始錄音
     func startRecording() {
-        // 請求權限
+        // 請求權限 - 使用新的 API
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             DispatchQueue.main.async {
                 if granted {
@@ -42,7 +42,8 @@ class AudioRecorder: ObservableObject {
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
             try audioSession.setActive(true)
             
-            let audioFilename = recordingsDirectory.appendingPathComponent("\(Date().timeIntervalSince1970).m4a")
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let audioFilename = recordingsDirectory.appendingPathComponent("recording_\(timestamp).m4a")
             
             let settings: [String: Any] = [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
@@ -57,13 +58,17 @@ class AudioRecorder: ObservableObject {
             
             isRecording = true
             recordingTime = 0
+            audioLevel = -160
             
             // 啟動定時器更新錄音時間
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 guard let self = self else { return }
                 self.recordingTime += 0.1
                 self.audioRecorder?.updateMeters()
-                self.audioLevel = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
+                
+                let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -160
+                // 確保值喺合理範圍內
+                self.audioLevel = max(-160, min(0, power))
             }
             
         } catch {
@@ -81,7 +86,7 @@ class AudioRecorder: ObservableObject {
         audioRecorder = nil
         
         isRecording = false
-        audioLevel = 0
+        audioLevel = -160
         
         return url
     }
@@ -100,7 +105,7 @@ class AudioRecorder: ObservableObject {
         
         isRecording = false
         recordingTime = 0
-        audioLevel = 0
+        audioLevel = -160
     }
     
     // 獲取所有錄音文件

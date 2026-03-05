@@ -22,6 +22,7 @@ struct RecordView: View {
             // 音頻level indicator
             AudioLevelView(level: audioRecorder.audioLevel, isRecording: audioRecorder.isRecording)
                 .frame(height: 20)
+                .padding(.horizontal)
             
             // 錄音狀態文字
             Text(statusText)
@@ -112,27 +113,24 @@ struct AudioLevelView: View {
     let isRecording: Bool
     
     var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 2) {
-                ForEach(0..<20, id: \.self) { index in
-                    Rectangle()
-                        .fill(barColor(for: index))
-                        .frame(width: (geometry.size.width - 38) / 20)
-                        .frame(height: barHeight(for: index, maxHeight: geometry.size.height))
-                        .animation(.linear(duration: 0.1), value: level)
-                }
+        HStack(spacing: 3) {
+            ForEach(0..<20, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(barColor(for: index))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: barHeight(for: index))
             }
         }
     }
     
-    private func barHeight(for index: Int, maxHeight: CGFloat) -> CGFloat {
+    private func barHeight(for index: Int) -> CGFloat {
         guard isRecording else { return 4 }
         
         // 將 dB (-160 ~ 0) 轉換為 0 ~ 1
-        let normalizedLevel = max(0, (level + 60) / 60)
-        let segmentThreshold = Float(index + 1) / 20.0
+        let normalizedLevel = max(0, min(1, (level + 60) / 60))
+        let segmentThreshold = CGFloat(index) / 20.0
         
-        return normalizedLevel > segmentThreshold ? maxHeight : 4
+        return normalizedLevel > segmentThreshold ? 20 : 4
     }
     
     private func barColor(for index: Int) -> Color {
