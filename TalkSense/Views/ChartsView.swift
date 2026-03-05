@@ -18,6 +18,10 @@ struct ChartsView: View {
                 if analyses.isEmpty {
                     EmptyChartsView()
                 } else {
+                    // 總結統計
+                    SummaryStatsView(analyses: analyses)
+                        .padding(.horizontal)
+                    
                     // 準確率趨勢
                     AccuracyTrendChart(analyses: analyses)
                         .frame(height: 200)
@@ -40,10 +44,6 @@ struct ChartsView: View {
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(12)
-                        .padding(.horizontal)
-                    
-                    // 總結統計
-                    SummaryStatsView(analyses: analyses)
                         .padding(.horizontal)
                 }
             }
@@ -99,11 +99,7 @@ struct AccuracyTrendChart: View {
                     }
                 }
                 .chartYScale(domain: 0...100)
-                .chartYAxis {
-                    AxisMarks(position: .leading)
-                }
             } else {
-                // iOS 15 fallback - 簡單文字顯示
                 Text("需要 iOS 16+ 先可以睇到圖表")
                     .foregroundColor(.secondary)
             }
@@ -176,6 +172,20 @@ struct PauseRatioChart: View {
 struct SummaryStatsView: View {
     let analyses: [RecordingAnalysis]
     
+    private var averageAccuracy: Double {
+        guard !analyses.isEmpty else { return 0 }
+        return analyses.reduce(0) { $0 + $1.accuracy } / Double(analyses.count)
+    }
+    
+    private var averageSpeechRate: Double {
+        guard !analyses.isEmpty else { return 0 }
+        return analyses.reduce(0) { $0 + $1.audioFeatures.speechRate } / Double(analyses.count)
+    }
+    
+    private var totalDuration: Double {
+        analyses.reduce(0) { $0 + $1.audioFeatures.totalDuration }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("總結", systemImage: "chart.pie")
@@ -216,20 +226,6 @@ struct SummaryStatsView: View {
         .padding()
         .background(Color.gray.opacity(0.1))
         .cornerRadius(12)
-    }
-    
-    private var averageAccuracy: Double {
-        guard !analyses.isEmpty else { return 0 }
-        return analyses.reduce(0) { $0 + $1.accuracy } / Double(analyses.count)
-    }
-    
-    private var averageSpeechRate: Double {
-        guard !analyses.isEmpty else { return 0 }
-        return analyses.reduce(0) { $0 + $1.audioFeatures.speechRate } / Double(analyses.count)
-    }
-    
-    private var totalDuration: Double {
-        analyses.reduce(0) { $0 + $1.audioFeatures.totalDuration }
     }
 }
 
