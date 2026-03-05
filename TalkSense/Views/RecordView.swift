@@ -102,12 +102,7 @@ struct RecordView: View {
         // 使用 DispatchSourceTimer 替代 Timer
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now(), repeating: 0.1)
-        timer.setEventHandler { [weak self] in
-            guard let self = self else {
-                timer.cancel()
-                return
-            }
-            
+        timer.setEventHandler { [self] in
             if self.isRecording {
                 self.recordingTime += 0.1
                 // 更新 audio level
