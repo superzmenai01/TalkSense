@@ -6,12 +6,18 @@ struct RecordView: View {
     @State private var showSaveAlert = false
     @State private var audioLevel: Float = -160
     
+    // 語音轉文字相關
+    @State private var transcribedText: String = ""
+    @State private var isTranscribing: Bool = false
+    @State private var showTranscriptionResult: Bool = false
+    
     @Environment(\.dismiss) private var dismiss
     
     private let audioRecorder = AudioRecorder()
+    private let speechToText = SpeechToText()
     
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 20) {
             // 標題
             Text("錄製語音")
                 .font(.largeTitle)
@@ -24,50 +30,111 @@ struct RecordView: View {
             
             // 音頻視覺化 (Bar Chart)
             AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
-                .frame(height: 100)
+                .frame(height: 80)
                 .padding(.horizontal)
             
+            // 轉文字結果 (如果有)
+            if !transcribedText.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("轉換文字：")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    ScrollView {
+                        Text(transcribedText)
+                            .font(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .frame(maxHeight: 150)
+                }
+                .padding(.horizontal)
+            }
+            
             // 狀態文字
-            Text(statusText)
-                .font(.headline)
-                .foregroundColor(.secondary)
+            if isTranscribing {
+                HStack {
+                    ProgressView()
+                    Text("正在轉換文字...")
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Text(statusText)
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+            }
             
             Spacer()
             
-            // 錄音按鈕
-            Button(action: {
-                if isRecording {
-                    // 停止錄音
-                    _ = audioRecorder.stopRecording()
-                    isRecording = false
-                    showSaveAlert = true
-                } else {
-                    // 開始錄音
-                    audioRecorder.startRecording()
-                    isRecording = true
-                    recordingTime = 0
-                    
-                    // 啟動定時器
-                    startTimer()
-                }
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(isRecording ? Color.red : Color.blue)
-                        .frame(width: 80, height: 80)
-                    
+            // 按鈕區域
+            VStack(spacing: 16) {
+                // 錄音/停止按鈕
+                Button(action: {
                     if isRecording {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white)
-                            .frame(width: 24, height: 24)
+                        // 停止錄音
+                        let url = audioRecorder.stopRecording()
+                        isRecording = false
+                        
+                        // 自動開始轉文字
+                        if let audioURL = url {
+                            isTranscribing = true
+                            speechToText.transcribe(audioURL: audioURL)
+                            
+                            // 模擬延遲獲取結果 (因為識別是異步的)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                isTranscribing = false
+                                transcribedText = speechToText.transcribedText
+                                if !transcribedText.isEmpty {
+                                    showSaveAlert = true
+                                }
+                            }
+                        }
                     } else {
+                        // 開始錄音
+                        audioRecorder.startRecording()
+                        isRecording = true
+                        recordingTime = 0
+                        transcribedText = "" // 清空之前既結果
+                        startTimer()
+                    }
+                }) {
+                    ZStack {
                         Circle()
-                            .fill(Color.white)
-                            .frame(width: 32, height: 32)
+                            .fill(isRecording ? Color.red : Color.blue)
+                            .frame(width: 80, height: 80)
+                        
+                        if isRecording {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.white)
+                                .frame(width: 24, height: 24)
+                        } else {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 32, height: 32)
+                        }
                     }
                 }
+                .shadow(radius: 5)
+                
+                // 錄音完成後既提示
+                if !isRecording && recordingTime > 0 && transcribedText.isEmpty && !isTranscribing {
+                    Button("轉換為文字") {
+                        let recordings = audioRecorder.getAllRecordings()
+                        if let latestRecording = recordings.first {
+                            isTranscribing = true
+                            speechToText.transcribe(audioURL: latestRecording)
+                            
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                isTranscribing = false
+                                transcribedText = speechToText.transcribedText
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
-            .shadow(radius: 5)
             
             Spacer()
         }
@@ -77,7 +144,11 @@ struct RecordView: View {
                 dismiss()
             }
         } message: {
-            Text("錄音已保存！")
+            if !transcribedText.isEmpty {
+                Text("錄音已保存！文字已轉換。")
+            } else {
+                Text("錄音已保存！")
+            }
         }
     }
     
@@ -118,13 +189,11 @@ struct AudioVisualizerView: View {
     let audioLevel: Float
     let isRecording: Bool
     
-    // 將 dB (-160 ~ 0) 轉換為 0 ~ 1
     private var normalizedLevel: Double {
         guard isRecording else { return 0 }
         return max(0, min(1, Double(audioLevel + 60) / 60))
     }
     
-    // 20 條 bar
     private let barCount = 20
     
     var body: some View {
@@ -147,23 +216,19 @@ struct AudioBar: View {
     let normalizedLevel: Double
     let isRecording: Bool
     
-    // 每條 bar 既高度
     private var barHeight: CGFloat {
         guard isRecording else { return 4 }
         
-        // 模擬不同頻率既響應 - 中間既 bar 高啲
         let centerIndex = totalBars / 2
         let distanceFromCenter = abs(index - centerIndex)
         let centerFactor = 1.0 - (Double(distanceFromCenter) / Double(centerIndex)) * 0.5
         
-        // 加入隨機性模擬音樂既跳動
         let randomFactor = Double.random(in: 0.7...1.3)
         
         let level = normalizedLevel * centerFactor * randomFactor
-        return max(4, CGFloat(level) * 100)
+        return max(4, CGFloat(level) * 80)
     }
     
-    // Bar 既顏色 - 低音到高音 (綠->黃->紅)
     private var barColor: Color {
         let ratio = Double(index) / Double(totalBars)
         if ratio < 0.4 {
@@ -178,7 +243,7 @@ struct AudioBar: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 2)
             .fill(barColor)
-            .frame(width: 12, height: barHeight)
+            .frame(width: 10, height: barHeight)
             .animation(.easeInOut(duration: 0.05), value: barHeight)
     }
 }
