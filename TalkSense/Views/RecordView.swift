@@ -25,7 +25,7 @@ struct RecordView: View {
     private let audioAnalyzer = AudioAnalyzer()
     private let storage = StorageService.shared
     
-    // 觸發分析既準確率閾值
+    // 觸發分析既準<file_content>閾值
     private let analysisThreshold: Double = 0.6
     
     var body: some View {
@@ -38,13 +38,21 @@ struct RecordView: View {
                 
                 Spacer()
                 
+                // 重新開始按鈕 - 如果有錄音數據就顯示
                 if totalRecordings > 0 {
                     Button(action: {
                         showResetConfirmation = true
                     }) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.title3)
-                            .foregroundColor(.red)
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("重新開始")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
                     }
                 }
             }
@@ -77,31 +85,38 @@ struct RecordView: View {
             
             // 按鈕區域
             VStack(spacing: 16) {
-                // 錄音/停止按鈕
-                Button(action: {
-                    if isRecording {
-                        stopRecording()
-                    } else {
-                        startRecording()
-                    }
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(isRecording ? Color.red : Color.blue)
-                            .frame(width: 80, height: 80)
-                        
+                // 錄音/停止按鈕 + 標籤
+                VStack(spacing: 8) {
+                    Button(action: {
                         if isRecording {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.white)
-                                .frame(width: 24, height: 24)
+                            stopRecording()
                         } else {
+                            startRecording()
+                        }
+                    }) {
+                        ZStack {
                             Circle()
-                                .fill(Color.white)
-                                .frame(width: 32, height: 32)
+                                .fill(isRecording ? Color.red : Color.blue)
+                                .frame(width: 80, height: 80)
+                            
+                            if isRecording {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.white)
+                                    .frame(width: 24, height: 24)
+                            } else {
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.white)
+                            }
                         }
                     }
+                    .shadow(radius: 5)
+                    
+                    // 錄音按鈕既標籤
+                    Text(isRecording ? "停止" : "開始")
+                        .font(.headline)
+                        .foregroundColor(isRecording ? .red : .blue)
                 }
-                .shadow(radius: 5)
                 
                 // 分析按鈕 (當有錄音數據時顯示)
                 if !isRecording && totalRecordings > 0 {
@@ -175,6 +190,7 @@ struct RecordView: View {
         isRecording = true
         recordingTime = 0
         currentRecording = nil
+        loadCumulativeStats()
         startTimer()
     }
     
