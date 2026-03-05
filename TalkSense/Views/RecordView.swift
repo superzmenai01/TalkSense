@@ -14,6 +14,10 @@ struct RecordView: View {
     @State private var averageAccuracy: Double = 0
     @State private var totalDuration: TimeInterval = 0
     
+    // 確認對話框
+    @State private var showResetConfirmation: Bool = false
+    @State private var showResetSuccess: Bool = false
+    
     @Environment(\.dismiss) private var dismiss
     
     private let audioRecorder = AudioRecorder()
@@ -26,10 +30,25 @@ struct RecordView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // 標題
-            Text("錄製語音")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+            // 標題 + 重新開始按鈕
+            HStack {
+                Text("錄製語音")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                if totalRecordings > 0 {
+                    Button(action: {
+                        showResetConfirmation = true
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.title3)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .padding(.horizontal)
             
             // 累積統計
             CumulativeStatsView(
@@ -104,7 +123,7 @@ struct RecordView: View {
                         .disabled(averageAccuracy < analysisThreshold)
                         
                         if averageAccuracy < analysisThreshold {
-                            Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析\n（目前：\(Int(averageAccuracy * 100))%，需要 \(totalRecordings) 次錄音）")
+                            Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析\n（目前：\(Int(averageAccuracy * 100))%，需要更多錄音）")
                                 .font(.caption)
                                 .foregroundColor(.orange)
                                 .multilineTextAlignment(.center)
@@ -135,6 +154,19 @@ struct RecordView: View {
         .padding()
         .onAppear {
             loadCumulativeStats()
+        }
+        .alert("重新開始？", isPresented: $showResetConfirmation) {
+            Button("取消", role: .cancel) { }
+            Button("確認清除", role: .destructive) {
+                resetAllData()
+            }
+        } message: {
+            Text("呢個操作會清除曬所有錄音同分析記錄，唔可以復原。你確定要繼續？")
+        }
+        .alert("已清除", isPresented: $showResetSuccess) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("所有數據已經清除，你可以重新開始錄音喇！")
         }
     }
     
@@ -198,6 +230,28 @@ struct RecordView: View {
         // 計算總時長
         let analyses = storage.getAllAnalyses()
         totalDuration = analyses.reduce(0) { $0 + ($1.audioFeatures.totalDuration) }
+    }
+    
+    private func resetAllData() {
+        // 清除所有錄音
+        let recordings = storage.getAllRecordings()
+        for recording in recordings {
+            storage.deleteRecording(recording)
+        }
+        
+        // 清除所有分析
+        let analyses = storage.getAllAnalyses()
+        for analysis in analyses {
+            storage.deleteAnalysis(analysis)
+        }
+        
+        // 重置狀態
+        currentRecording = nil
+        totalRecordings = 0
+        averageAccuracy = 0
+        totalDuration = 0
+        
+        showResetSuccess = true
     }
     
     private func performAnalysis() {
