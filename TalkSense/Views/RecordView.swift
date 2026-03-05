@@ -49,6 +49,11 @@ struct RecordView: View {
                     .frame(height: 80)
                     .padding(.horizontal)
                 
+                // 處理中既 Loading 顯示
+                if isProcessing {
+                    ProcessingView()
+                }
+                
                 // 當前錄音結果
                 if let recording = currentRecording {
                     CurrentRecordingView(recording: recording)
@@ -84,6 +89,7 @@ struct RecordView: View {
                             }
                         }
                         .shadow(radius: 5)
+                        .disabled(isProcessing) // 處理緊既時候 disable
                         
                         // 錄音按鈕既標籤
                         Text(isRecording ? "停止" : "開始")
@@ -92,7 +98,7 @@ struct RecordView: View {
                     }
                     
                     // 分析按鈕 (當有錄音數據時顯示)
-                    if !isRecording && totalRecordings > 0 {
+                    if !isRecording && !isProcessing && totalRecordings > 0 {
                         VStack(spacing: 12) {
                             Button(action: {
                                 performAnalysis()
@@ -121,7 +127,7 @@ struct RecordView: View {
                     }
                     
                     // 完成按鈕
-                    if totalRecordings > 0 && currentRecording == nil && !isRecording {
+                    if !isRecording && !isProcessing && totalRecordings > 0 && currentRecording == nil {
                         Button(action: {
                             dismiss()
                         }) {
@@ -144,9 +150,8 @@ struct RecordView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if totalRecordings > 0 {
+                    if totalRecordings > 0 && !isProcessing {
                         Button(action: {
-                            print("Reset button tapped, showResetConfirmation: \(showResetConfirmation)")
                             showResetConfirmation = true
                         }) {
                             HStack(spacing: 4) {
@@ -160,13 +165,11 @@ struct RecordView: View {
                 }
             }
             .onAppear {
-                print("RecordView appeared, loading stats...")
                 loadCumulativeStats()
             }
             .alert("重新開始？", isPresented: $showResetConfirmation) {
                 Button("取消", role: .cancel) { }
                 Button("確認清除", role: .destructive) {
-                    print("Confirm reset tapped")
                     resetAllData()
                 }
             } message: {
@@ -197,14 +200,14 @@ struct RecordView: View {
         // 保存錄音
         _ = storage.saveRecording(from: audioURL)
         
-        // 處理中
+        // 開始處理，顯示 loading
         isProcessing = true
         
         // 轉文字 + 分析
         speechToText.transcribe(audioURL: audioURL)
         audioAnalyzer.analyze(audioURL: audioURL)
         
-        // 延遲獲取結果
+        // 延遲獲取結果 (2.5秒)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [self] in
             let text = speechToText.transcribedText
             let features = audioAnalyzer.audioFeatures
@@ -229,6 +232,7 @@ struct RecordView: View {
             // 重新加載統計
             loadCumulativeStats()
             
+            // 完成處理
             isProcessing = false
         }
     }
@@ -240,13 +244,9 @@ struct RecordView: View {
         // 計算總時長
         let analyses = storage.getAllAnalyses()
         totalDuration = analyses.reduce(0) { $0 + ($1.audioFeatures.totalDuration) }
-        
-        print("Loaded stats: \(totalRecordings) recordings, \(averageAccuracy) accuracy")
     }
     
     private func resetAllData() {
-        print("Reset function called")
-        
         // 清除所有錄音
         let recordings = storage.getAllRecordings()
         for recording in recordings {
@@ -291,6 +291,47 @@ struct RecordView: View {
             }
         }
         timer.resume()
+    }
+}
+
+// MARK: - 處理中顯示
+struct ProcessingView: View {
+    @State private var dots: String = ""
+    @State private var timer: Timer?
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                
+                Text("處理中\(dots)")
+                    .font(.headline)
+                    .foregroundColor(.blue)
+            }
+            
+            Text("正在轉換文字同分析音頻...")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding(30)
+        .frame(maxWidth: .infinity)
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(12)
+        .padding(.horizontal)
+        .onAppear {
+            // 動畫效果
+            timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                if dots.count >= 3 {
+                    dots = ""
+                } else {
+                    dots += "."
+                }
+            }
+        }
+        .onDisappear {
+            timer?.invalidate()
+        }
     }
 }
 
