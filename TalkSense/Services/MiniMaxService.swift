@@ -5,10 +5,8 @@ class MiniMaxService {
     
     private let baseURL = "https://api.minimax.chat/v1"
     
-    // API Key 會從 UserDefaults 讀取
     private var apiKey: String {
         get {
-            // 嘗試從 UserDefaults 讀取
             if let savedKey = UserDefaults.standard.string(forKey: "minimax_api_key") {
                 return savedKey
             }
@@ -21,17 +19,14 @@ class MiniMaxService {
     
     private init() {}
     
-    // 檢查是否已設置 API Key
     var isConfigured: Bool {
         !apiKey.isEmpty
     }
     
-    // 設置 API Key (從外部調用)
     func setAPIKey(_ key: String) {
         apiKey = key
     }
     
-    // 清除 API Key
     func clearAPIKey() {
         apiKey = ""
     }
@@ -79,7 +74,49 @@ class MiniMaxService {
         - 整體性格總結 (3-4 句)
         """
         
-        sendChatRequest(prompt: prompt, completion: completion)
+        // 發送請求並解析
+        sendChatRequest(prompt: prompt) { [weak self] result in
+            switch result {
+            case .success(let response):
+                // 解析 response 獲取分數
+                let analysis = self?.parsePersonalityResponse(response) ?? PersonalityAnalysis(
+                    extraversion: 50,
+                    stability: 50,
+                    openness: 50,
+                    agreeableness: 50,
+                    conscientiousness: 50,
+                    summary: response,
+                    timestamp: Date()
+                )
+                completion(.success(analysis))
+                
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // 解析 AI 回覆
+    private func parsePersonalityResponse(_ response: String) -> PersonalityAnalysis {
+        // 簡單解析 - 實際應該用更強既方法
+        var extraversion = 50
+        var stability = 50
+        var openness = 50
+        var agreeableness = 50
+        var conscientiousness = 50
+        
+        // 呢度可以用 regex 或者其他方法解析
+        // 暫時用預設值
+        
+        return PersonalityAnalysis(
+            extraversion: extraversion,
+            stability: stability,
+            openness: openness,
+            agreeableness: agreeableness,
+            conscientiousness: conscientiousness,
+            summary: response,
+            timestamp: Date()
+        )
     }
     
     // 發送聊天請求 (通用)
