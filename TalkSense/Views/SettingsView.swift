@@ -7,10 +7,53 @@ struct SettingsView: View {
     @State private var nextReminderTime: Date?
     @State private var showPermissionAlert: Bool = false
     
+    // API Key 設置
+    @State private var apiKeyInput: String = ""
+    @State private var showAPIKeySet: Bool = false
+    
     private let notificationService = NotificationService.shared
+    private let miniMaxService = MiniMaxService.shared
     
     var body: some View {
         List {
+            // API Key 設置
+            Section {
+                if miniMaxService.isConfigured {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("API Key 已設置")
+                            .foregroundColor(.green)
+                    }
+                    
+                    Button("清除 API Key") {
+                        miniMaxService.clearAPIKey()
+                    }
+                    .foregroundColor(.red)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("MiniMax API Key")
+                            .font(.headline)
+                        
+                        SecureField("輸入 API Key", text: $apiKeyInput)
+                            .textFieldStyle(.roundedBorder)
+                        
+                        Button("保存") {
+                            if !apiKeyInput.isEmpty {
+                                miniMaxService.setAPIKey(apiKeyInput)
+                                apiKeyInput = ""
+                                showAPIKeySet = true
+                            }
+                        }
+                        .disabled(apiKeyInput.isEmpty)
+                    }
+                }
+            } header: {
+                Text("AI 配置")
+            } footer: {
+                Text("呢個 Key 會保存在你既手機度，唔會上傳到其他地方。")
+            }
+            
             // 提醒設置
             Section {
                 Toggle("開啟每日提醒", isOn: $reminderEnabled)
@@ -90,6 +133,9 @@ struct SettingsView: View {
         } message: {
             Text("請允許通知權限，先可以使用提醒功能。")
         }
+        .alert("API Key 已保存", isPresented: $showAPIKeySet) {
+            Button("OK", role: .cancel) { }
+        }
     }
     
     private func requestNotificationPermission() {
@@ -116,7 +162,6 @@ struct SettingsView: View {
     }
     
     private func loadSettings() {
-        // 從 UserDefaults 讀取設置
         reminderEnabled = UserDefaults.standard.bool(forKey: "reminderEnabled")
         reminderHour = UserDefaults.standard.integer(forKey: "reminderHour")
         reminderMinute = UserDefaults.standard.integer(forKey: "reminderMinute")
