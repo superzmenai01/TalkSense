@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 class QuestionService {
     static let shared = QuestionService()
@@ -148,6 +149,16 @@ enum QuestionCategory: String, CaseIterable {
         case .emotional: return "了解你既情緒管理模式"
         case .relationship: return "了解你既人際關係"
         case .decision: return "了解你既決定方式"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .situational: return .blue
+        case .values: return .purple
+        case .emotional: return .orange
+        case .relationship: return .green
+        case .decision: return .pink
         }
     }
 }
