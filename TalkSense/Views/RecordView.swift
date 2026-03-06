@@ -7,8 +7,13 @@ struct RecordView: View {
     
     // 問題相關
     @State private var currentQuestion: Question?
-    @State private var questionHistory: [QuestionAnswer] = []
-    @State private var showNextQuestion: Bool = false
+    @State private var currentFollowUpQuestion: String?
+    @State private var questionAnswers: [String] = [] // 所有回答
+    @State private var followUpCount: Int = 0 // 追問次數
+    @State private var showNextQuestionPrompt: Bool = false
+    
+    // AI 處理中
+    @State private var isAIThinking: Bool = false
     
     // 當前錄音
     @State private var currentRecording: CurrentRecording?
@@ -30,165 +35,167 @@ struct RecordView: View {
     private let audioAnalyzer = AudioAnalyzer()
     private let storage = StorageService.shared
     private let questionService = QuestionService.shared
+    private let aiQuestionService = AIQuestionService.shared
     
-    // 觸發分析既準確率閾值
+    // 觸發分析既準 inúmer閾值
     private let analysisThreshold: Double = 0.6
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // 累積統計
-                CumulativeStatsView(
-                    totalRecordings: totalRecordings,
-                    averageAccuracy: averageAccuracy,
-                    totalDuration: totalDuration,
-                    threshold: analysisThreshold
-                )
-                
-                // 錄音時間顯示
-                Text(formatTime(recordingTime))
-                    .font(.system(size: 48, weight: .medium, design: .monospaced))
-                    .foregroundColor(isRecording ? .red : .secondary)
-                
-                // 音頻視覺化
-                AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
-                    .frame(height: 80)
-                    .padding(.horizontal)
-                
-                // 問題顯示區域
-                QuestionDisplayView(
-                    question: currentQuestion,
-                    questionHistory: questionHistory,
-                    isRecording: isRecording,
-                    showNextQuestion: showNextQuestion,
-                    onStartRecording: {
-                        showNextQuestion = false
-                    }
-                )
-                
-                // 處理中既 Loading 顯示
-                if isProcessing {
-                    ProcessingView()
-                }
-                
-                // 當前錄音結果
-                if let recording = currentRecording {
-                    CurrentRecordingView(recording: recording)
-                }
-                
-                Spacer()
-                
-                // 按鈕區域
-                VStack(spacing: 16) {
-                    // 錄音/停止按鈕 + 標籤
-                    VStack(spacing: 8) {
-                        Button(action: {
-                            if isRecording {
-                                stopRecording()
-                            } else {
-                                startRecording()
-                            }
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(isRecording ? Color.red : Color.blue)
-                                    .frame(width: 80, height: 80)
-                                
-                                if isRecording {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.white)
-                                        .frame(width: 24, height: 24)
-                                } else {
-                                    Image(systemName: "mic.fill")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                        }
-                        .shadow(radius: 5)
-                        .disabled(isProcessing)
-                        
-                        // 錄音按鈕既標籤
-                        Text(isRecording ? "停止" : "開始")
-                            .font(.headline)
-                            .foregroundColor(isRecording ? .red : .blue)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 累積統計
+                    CumulativeStatsView(
+                        totalRecordings: totalRecordings,
+                        averageAccuracy: averageAccuracy,
+                        totalDuration: totalDuration,
+                        threshold: analysisThreshold
+                    )
+                    
+                    // 錄音時間顯示
+                    Text(formatTime(recordingTime))
+                        .font(.system(size: 48, weight: .medium, design: .monospaced))
+                        .foregroundColor(isRecording ? .red : .secondary)
+                    
+                    // 音頻視覺化
+                    AudioVisualizerView(audioLevel: audioLevel, isRecording: isRecording)
+                        .frame(height: 60)
+                        .padding(.horizontal)
+                    
+                    // 問題顯示區域
+                    QuestionDisplayArea(
+                        mainQuestion: currentQuestion,
+                        followUpQuestion: currentFollowUpQuestion,
+                        questionAnswers: questionAnswers,
+                        isRecording: isRecording,
+                        isAIThinking: isAIThinking,
+                        showNextPrompt: showNextQuestionPrompt
+                    )
+                    
+                    // AI 思考緊既顯示
+                    if isAIThinking {
+                        AIThinkingView()
                     }
                     
-                    // 問題導航按鈕
-                    if !isRecording && !isProcessing && currentQuestion != nil && currentRecording != nil {
-                        Button(action: {
-                            showNextQuestion = true
-                            currentQuestion = questionService.getRandomQuestion()
-                            currentRecording = nil
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.right.circle.fill")
-                                Text("下一題")
-                            }
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.orange)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                        }
-                        .padding(.horizontal, 40)
+                    // 處理中既 Loading 顯示
+                    if isProcessing && !isAIThinking {
+                        ProcessingView()
                     }
                     
-                    // 分析按鈕 (當有錄音數據時顯示)
-                    if !isRecording && !isProcessing && totalRecordings > 0 {
-                        VStack(spacing: 12) {
+                    // 按鈕區域
+                    VStack(spacing: 16) {
+                        // 錄音/停止按鈕
+                        VStack(spacing: 8) {
                             Button(action: {
-                                performAnalysis()
-                            }) {
-                                HStack {
-                                    Image(systemName: "brain.head.profile")
-                                    Text("開始性格分析")
+                                if isRecording {
+                                    stopRecording()
+                                } else {
+                                    startRecording()
                                 }
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(averageAccuracy >= analysisThreshold ? Color.green : Color.gray)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
+                            }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(isRecording ? Color.red : (isAIThinking ? Color.gray : Color.blue))
+                                        .frame(width: 80, height: 80)
+                                    
+                                    if isRecording {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.white)
+                                            .frame(width: 24, height: 24)
+                                    } else {
+                                        Image(systemName: "mic.fill")
+                                            .font(.system(size: 30))
+                                            .foregroundColor(.white)
+                                    }
+                                }
                             }
-                            .disabled(averageAccuracy < analysisThreshold)
+                            .shadow(radius: 5)
+                            .disabled(isProcessing || isAIThinking)
                             
-                            if averageAccuracy < analysisThreshold {
-                                Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析\n（目前：\(Int(averageAccuracy * 100))%，需要更多錄音）")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
+                            Text(buttonLabel)
+                                .font(.headline)
+                                .foregroundColor(isRecording ? .red : .blue)
+                        }
+                        
+                        // AI 建議去下一題既提示
+                        if showNextQuestionPrompt && !isRecording && !isProcessing && !isAIThinking {
+                            VStack(spacing: 12) {
+                                Text("AI認為已經收集夠資料可以去下一題喇！")
+                                    .font(.subheadline)
+                                    .foregroundColor(.green)
                                     .multilineTextAlignment(.center)
+                                
+                                Button(action: {
+                                    goToNextQuestion()
+                                }) {
+                                    HStack {
+                                        Image(systemName: "arrow.right.circle.fill")
+                                        Text("去下一題")
+                                    }
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.orange)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
+                                }
+                                .padding(.horizontal, 40)
                             }
                         }
-                        .padding(.horizontal, 40)
-                    }
-                    
-                    // 完成按鈕
-                    if !isRecording && !isProcessing && totalRecordings > 0 && currentRecording == nil {
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            Text("完成")
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
+                        
+                        // 正常既分析按鈕
+                        if !isRecording && !isProcessing && !isAIThinking && totalRecordings > 0 && !showNextQuestionPrompt {
+                            VStack(spacing: 12) {
+                                Button(action: {
+                                    performAnalysis()
+                                }) {
+                                    HStack {
+                                        Image(systemName: "brain.head.profile")
+                                        Text("開始性格分析")
+                                    }
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(averageAccuracy >= analysisThreshold ? Color.green : Color.gray)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
+                                }
+                                .disabled(averageAccuracy < analysisThreshold)
+                                
+                                if averageAccuracy < analysisThreshold {
+                                    Text("累積數據不足，等 \(Int(analysisThreshold * 100))% 再分析")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                        .multilineTextAlignment(.center)
+                                }
+                            }
+                            .padding(.horizontal, 40)
                         }
-                        .padding(.horizontal, 40)
+                        
+                        // 完成按鈕
+                        if !isRecording && !isProcessing && !isAIThinking && totalRecordings > 0 && currentRecording == nil && !showNextQuestionPrompt {
+                            Button(action: {
+                                dismiss()
+                            }) {
+                                Text("完成")
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.green)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
+                            }
+                            .padding(.horizontal, 40)
+                        }
                     }
                 }
-                
-                Spacer()
+                .padding(.vertical)
             }
-            .padding(.top, 20)
             .navigationTitle("錄製語音")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if totalRecordings > 0 && !isProcessing {
+                    if totalRecordings > 0 && !isProcessing && !isAIThinking {
                         Button(action: {
                             showResetConfirmation = true
                         }) {
@@ -224,6 +231,18 @@ struct RecordView: View {
         }
     }
     
+    private var buttonLabel: String {
+        if isRecording {
+            return "停止"
+        } else if isAIThinking {
+            return "AI思考中..."
+        } else if currentFollowUpQuestion != nil {
+            return "回答"
+        } else {
+            return "開始"
+        }
+    }
+    
     private func startRecording() {
         audioRecorder.startRecording()
         isRecording = true
@@ -240,14 +259,14 @@ struct RecordView: View {
         // 保存錄音
         _ = storage.saveRecording(from: audioURL)
         
-        // 開始處理，顯示 loading
+        // 開始處理
         isProcessing = true
         
         // 轉文字 + 分析
         speechToText.transcribe(audioURL: audioURL)
         audioAnalyzer.analyze(audioURL: audioURL)
         
-        // 延遲獲取結果 (2.5秒)
+        // 延遲獲取結果
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [self] in
             let text = speechToText.transcribedText
             let features = audioAnalyzer.audioFeatures
@@ -261,17 +280,10 @@ struct RecordView: View {
                     accuracy: audioFeatures.confidence
                 )
                 _ = storage.saveAnalysis(analysis)
-                
-                // 添加到問題歷史
-                if let question = currentQuestion {
-                    let qa = QuestionAnswer(
-                        question: question.question,
-                        answer: text,
-                        audioFeatures: audioFeatures
-                    )
-                    questionHistory.append(qa)
-                }
             }
+            
+            // 添加到回答歷史
+            questionAnswers.append(text)
             
             // 更新當前錄音顯示
             currentRecording = CurrentRecording(
@@ -284,35 +296,86 @@ struct RecordView: View {
             
             // 完成處理
             isProcessing = false
+            
+            // AI 生成跟進問題
+            if let question = currentQuestion {
+                askAIForFollowUp(question: question.question, answer: text)
+            }
         }
+    }
+    
+    private func askAIForFollowUp(question: String, answer: String) {
+        isAIThinking = true
+        
+        aiQuestionService.generateFollowUpQuestion(
+            originalQuestion: question,
+            previousAnswer: answer,
+            category: currentQuestion?.category ?? .situational,
+            questionCount: followUpCount
+        ) { [self] result in
+            isAIThinking = false
+            
+            switch result {
+            case .success(let followUp):
+                if followUp.shouldMoveNext {
+                    // AI 話可以去下一題
+                    showNextQuestionPrompt = true
+                } else if !followUp.question.isEmpty {
+                    // AI 生成咗跟進問題
+                    currentFollowUpQuestion = followUp.question
+                    followUpCount += 1
+                } else {
+                    // 冇問題，去下一題
+                    showNextQuestionPrompt = true
+                }
+                
+            case .failure:
+                // 出錯，去下一題
+                showNextQuestionPrompt = true
+            }
+        }
+    }
+    
+    private func goToNextQuestion() {
+        // 保存呢個問題既所有回答
+        let allAnswers = questionAnswers.joined(separator: "；")
+        
+        // 搵下一條新問題
+        currentQuestion = questionService.getRandomQuestion()
+        
+        // 重置狀態
+        currentFollowUpQuestion = nil
+        questionAnswers = []
+        followUpCount = 0
+        showNextQuestionPrompt = false
+        currentRecording = nil
     }
     
     private func loadCumulativeStats() {
         totalRecordings = storage.getTotalAnalysesCount()
         averageAccuracy = storage.getAverageAccuracy()
         
-        // 計算總時長
         let analyses = storage.getAllAnalyses()
         totalDuration = analyses.reduce(0) { $0 + ($1.audioFeatures.totalDuration) }
     }
     
     private func resetAllData() {
-        // 清除所有錄音
         let recordings = storage.getAllRecordings()
         for recording in recordings {
             storage.deleteRecording(recording)
         }
         
-        // 清除所有分析
         let analyses = storage.getAllAnalyses()
         for analysis in analyses {
             storage.deleteAnalysis(analysis)
         }
         
-        // 重置狀態
         currentRecording = nil
         currentQuestion = questionService.getRandomQuestion()
-        questionHistory = []
+        currentFollowUpQuestion = nil
+        questionAnswers = []
+        followUpCount = 0
+        showNextQuestionPrompt = false
         totalRecordings = 0
         averageAccuracy = 0
         totalDuration = 0
@@ -346,18 +409,19 @@ struct RecordView: View {
     }
 }
 
-// MARK: - 問題顯示組件
-struct QuestionDisplayView: View {
-    let question: Question?
-    let questionHistory: [QuestionAnswer]
+// MARK: - 問題顯示區域
+struct QuestionDisplayArea: View {
+    let mainQuestion: Question?
+    let followUpQuestion: String?
+    let questionAnswers: [String]
     let isRecording: Bool
-    let showNextQuestion: Bool
-    let onStartRecording: () -> Void
+    let isAIThinking: Bool
+    let showNextPrompt: Bool
     
     var body: some View {
         VStack(spacing: 12) {
-            // 顯示當前問題
-            if let q = question {
+            // 主要問題
+            if let q = mainQuestion {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("問題")
@@ -369,17 +433,10 @@ struct QuestionDisplayView: View {
                             .cornerRadius(4)
                         
                         Spacer()
-                        
-                        if isRecording {
-                            Text("錄音中...")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
                     }
                     
                     Text(q.question)
                         .font(.headline)
-                        .foregroundColor(.primary)
                     
                     Text(q.category.description)
                         .font(.caption)
@@ -388,51 +445,93 @@ struct QuestionDisplayView: View {
                 .padding()
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(12)
-                .padding(.horizontal)
             }
             
-            // 問題歷史
-            if !questionHistory.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(0..<questionHistory.count, id: \.self) { index in
-                            VStack {
-                                Text("Q\(index + 1)")
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                                Circle()
-                                    .fill(index == questionHistory.count - 1 ? Color.green : Color.gray)
-                                    .frame(width: 8, height: 8)
-                            }
-                            .padding(8)
-                            .background(index == questionHistory.count - 1 ? Color.green.opacity(0.2) : Color.gray.opacity(0.1))
-                            .cornerRadius(8)
+            // 跟進問題
+            if let followUp = followUpQuestion {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("跟進問題")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange)
+                            .cornerRadius(4)
+                        
+                        Spacer()
+                    }
+                    
+                    Text(followUp)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                }
+                .padding()
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(12)
+            }
+            
+            // 回答歷史
+            if !questionAnswers.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("已回答 (\(questionAnswers.count)次)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    ForEach(0..<questionAnswers.count, id: \.self) { index in
+                        HStack(alignment: .top) {
+                            Text("\(index + 1).")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(questionAnswers[index])
+                                .font(.caption)
+                                .lineLimit(2)
                         }
                     }
-                    .padding(.horizontal)
                 }
+                .padding(.horizontal)
             }
         }
+        .padding(.horizontal)
     }
 }
 
-// MARK: - QuestionAnswer 數據模型
-struct QuestionAnswer: Identifiable {
-    let id = UUID()
-    let question: String
-    let answer: String
-    let audioFeatures: AudioAnalyzer.AudioFeatures?
-}
-
-// MARK: - Category Extension
-extension QuestionCategory {
-    var color: Color {
-        switch self {
-        case .situational: return .blue
-        case .values: return .purple
-        case .emotional: return .orange
-        case .relationship: return .green
-        case .decision: return .pink
+// MARK: - AI 思考顯示
+struct AIThinkingView: View {
+    @State private var dots: String = ""
+    @State private var timer: Timer?
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .orange))
+                
+                Text("AI 分析緊\(dots)")
+                    .font(.headline)
+                    .foregroundColor(.orange)
+            }
+            
+            Text("緊係度諗跟進問題...")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(12)
+        .padding(.horizontal)
+        .onAppear {
+            timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                if dots.count >= 3 {
+                    dots = ""
+                } else {
+                    dots += "."
+                }
+            }
+        }
+        .onDisappear {
+            timer?.invalidate()
         }
     }
 }
@@ -457,7 +556,7 @@ struct ProcessingView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
-        .padding(30)
+        .padding(20)
         .frame(maxWidth: .infinity)
         .background(Color.blue.opacity(0.1))
         .cornerRadius(12)
@@ -536,46 +635,7 @@ struct StatItem: View {
     }
 }
 
-// MARK: - 當前錄音結果
-struct CurrentRecordingView: View {
-    let recording: CurrentRecording
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("回答內容")
-                    .font(.headline)
-                Spacer()
-                if let features = recording.audioFeatures {
-                    Text("\(Int(features.confidence * 100))%")
-                        .font(.subheadline)
-                        .foregroundColor(.green)
-                }
-            }
-            
-            if !recording.transcribedText.isEmpty {
-                Text(recording.transcribedText)
-                    .font(.body)
-                    .lineLimit(3)
-                    .foregroundColor(.secondary)
-            }
-            
-            if let features = recording.audioFeatures {
-                HStack(spacing: 16) {
-                    Label("\(Int(features.speechRate)) WPM", systemImage: "waveform")
-                    Label(features.pauseRatio > 0.2 ? "多停頓" : "流暢", systemImage: features.pauseRatio > 0.2 ? "pause.circle" : "play.circle")
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-            }
-        }
-        .padding()
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(8)
-        .padding(.horizontal)
-    }
-}
-
+// MARK: - CurrentRecording
 struct CurrentRecording {
     let transcribedText: String
     let audioFeatures: AudioAnalyzer.AudioFeatures?
@@ -596,24 +656,15 @@ struct AudioVisualizerView: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 3) {
             ForEach(0..<barCount, id: \.self) { index in
-                AudioBar(
-                    index: index,
-                    totalBars: barCount,
-                    normalizedLevel: normalizedLevel,
-                    isRecording: isRecording
-                )
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(barColor(for: index))
+                    .frame(width: 10, height: barHeight(for: index))
+                    .animation(.easeInOut(duration: 0.05), value: barHeight(for: index))
             }
         }
     }
-}
-
-struct AudioBar: View {
-    let index: Int
-    let totalBars: Int
-    let normalizedLevel: Double
-    let isRecording: Bool
     
-    private var barHeight: CGFloat {
+    private func barHeight(for index: Int) -> CGFloat {
         guard isRecording else { return 4 }
         
         let centerIndex = totalBars / 2
@@ -622,21 +673,14 @@ struct AudioBar: View {
         let randomFactor = Double.random(in: 0.7...1.3)
         
         let level = normalizedLevel * centerFactor * randomFactor
-        return max(4, CGFloat(level) * 80)
+        return max(4, CGFloat(level) * 60)
     }
     
-    private var barColor: Color {
+    private func barColor(for index: Int) -> Color {
         let ratio = Double(index) / Double(totalBars)
         if ratio < 0.4 { return .green }
         else if ratio < 0.7 { return .yellow }
         else { return .red }
-    }
-    
-    var body: some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(barColor)
-            .frame(width: 10, height: barHeight)
-            .animation(.easeInOut(duration: 0.05), value: barHeight)
     }
 }
 
