@@ -8,12 +8,13 @@ struct RecordView: View {
     // 問題相關
     @State private var currentQuestion: Question?
     @State private var currentFollowUpQuestion: String?
-    @State private var questionAnswers: [String] = [] // 所有回答
-    @State private var followUpCount: Int = 0 // 追問次數
+    @State private var questionAnswers: [String] = []
+    @State private var followUpCount: Int = 0
     @State private var showNextQuestionPrompt: Bool = false
     
     // AI 處理中
     @State private var isAIThinking: Bool = false
+    @State private var aiErrorMessage: String?
     
     // 當前錄音
     @State private var currentRecording: CurrentRecording?
@@ -37,7 +38,6 @@ struct RecordView: View {
     private let questionService = QuestionService.shared
     private let aiQuestionService = AIQuestionService.shared
     
-    // 觸發分析既準 inúmer閾值
     private let analysisThreshold: Double = 0.6
     
     var body: some View {
@@ -62,15 +62,19 @@ struct RecordView: View {
                         .frame(height: 60)
                         .padding(.horizontal)
                     
-                    // 問題顯示區域
-                    QuestionDisplayArea(
-                        mainQuestion: currentQuestion,
-                        followUpQuestion: currentFollowUpQuestion,
-                        questionAnswers: questionAnswers,
-                        isRecording: isRecording,
-                        isAIThinking: isAIThinking,
-                        showNextPrompt: showNextQuestionPrompt
-                    )
+                    // 問題顯示區域 (可 scroll)
+                    ScrollView {
+                        QuestionDisplayArea(
+                            mainQuestion: currentQuestion,
+                            followUpQuestion: currentFollowUpQuestion,
+                            questionAnswers: questionAnswers,
+                            isRecording: isRecording,
+                            isAIThinking: isAIThinking,
+                            showNextPrompt: showNextQuestionPrompt,
+                            aiErrorMessage: aiErrorMessage
+                        )
+                    }
+                    .frame(maxHeight: 300)
                     
                     // AI 思考緊既顯示
                     if isAIThinking {
@@ -95,7 +99,7 @@ struct RecordView: View {
                             }) {
                                 ZStack {
                                     Circle()
-                                        .fill(isRecording ? Color.red : (isAIThinking ? Color.gray : Color.blue))
+                                        .fill(isRecording ? Color.red : (isAIThinking || isProcessing ? Color.gray : Color.blue))
                                         .frame(width: 80, height: 80)
                                     
                                     if isRecording {
@@ -120,7 +124,7 @@ struct RecordView: View {
                         // AI 建議去下一題既提示
                         if showNextQuestionPrompt && !isRecording && !isProcessing && !isAIThinking {
                             VStack(spacing: 12) {
-                                Text("AI認為已經收集夠資料可以去下一題喇！")
+                                Text("✅ AI認為已經收集夠資料，可以去下一題喇！")
                                     .font(.subheadline)
                                     .foregroundColor(.green)
                                     .multilineTextAlignment(.center)
@@ -236,6 +240,8 @@ struct RecordView: View {
             return "停止"
         } else if isAIThinking {
             return "AI思考中..."
+        } else if isProcessing {
+            return "處理中..."
         } else if currentFollowUpQuestion != nil {
             return "回答"
         } else {
@@ -247,6 +253,7 @@ struct RecordView: View {
         audioRecorder.startRecording()
         isRecording = true
         recordingTime = 0
+        aiErrorMessage = nil
         startTimer()
     }
     
@@ -256,22 +263,17 @@ struct RecordView: View {
         
         guard let audioURL = url else { return }
         
-        // 保存錄音
         _ = storage.saveRecording(from: audioURL)
         
-        // 開始處理
         isProcessing = true
         
-        // 轉文字 + 分析
         speechToText.transcribe(audioURL: audioURL)
         audioAnalyzer.analyze(audioURL: audioURL)
         
-        // 延遲獲取結果
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [self] in
             let text = speechToText.transcribedText
             let features = audioAnalyzer.audioFeatures
             
-            // 保存分析結果
             if let audioFeatures = features {
                 let analysis = RecordingAnalysis(
                     recordingId: audioURL.lastPathComponent,
@@ -282,19 +284,15 @@ struct RecordView: View {
                 _ = storage.saveAnalysis(analysis)
             }
             
-            // 添加到回答歷史
             questionAnswers.append(text)
             
-            // 更新當前錄音顯示
             currentRecording = CurrentRecording(
                 transcribedText: text,
                 audioFeatures: features
             )
             
-            // 重新加載統計
             loadCumulativeStats()
             
-            // 完成處理
             isProcessing = false
             
             // AI 生成跟進問題
@@ -306,6 +304,7 @@ struct RecordView: View {
     
     private func askAIForFollowUp(question: String, answer: String) {
         isAIThinking = true
+        aiErrorMessage = nil
         
         aiQuestionService.generateFollowUpQuestion(
             originalQuestion: question,
@@ -318,32 +317,24 @@ struct RecordView: View {
             switch result {
             case .success(let followUp):
                 if followUp.shouldMoveNext {
-                    // AI 話可以去下一題
                     showNextQuestionPrompt = true
                 } else if !followUp.question.isEmpty {
-                    // AI 生成咗跟進問題
                     currentFollowUpQuestion = followUp.question
                     followUpCount += 1
                 } else {
-                    // 冇問題，去下一題
                     showNextQuestionPrompt = true
                 }
                 
-            case .failure:
-                // 出錯，去下一題
+            case .failure(let error):
+                aiErrorMessage = "AI 追問失敗: \(error.localizedDescription)"
+                // 如果出錯，都可以去下一題
                 showNextQuestionPrompt = true
             }
         }
     }
     
     private func goToNextQuestion() {
-        // 保存呢個問題既所有回答
-        let allAnswers = questionAnswers.joined(separator: "；")
-        
-        // 搵下一條新問題
         currentQuestion = questionService.getRandomQuestion()
-        
-        // 重置狀態
         currentFollowUpQuestion = nil
         questionAnswers = []
         followUpCount = 0
@@ -409,7 +400,7 @@ struct RecordView: View {
     }
 }
 
-// MARK: - 問題顯示區域
+// MARK: - 問題顯示區域 (可 scroll)
 struct QuestionDisplayArea: View {
     let mainQuestion: Question?
     let followUpQuestion: String?
@@ -417,10 +408,11 @@ struct QuestionDisplayArea: View {
     let isRecording: Bool
     let isAIThinking: Bool
     let showNextPrompt: Bool
+    let aiErrorMessage: String?
     
     var body: some View {
-        VStack(spacing: 12) {
-            // 主要問題
+        VStack(alignment: .leading, spacing: 16) {
+            // 主要問題 (全部顯示)
             if let q = mainQuestion {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -437,6 +429,8 @@ struct QuestionDisplayArea: View {
                     
                     Text(q.question)
                         .font(.headline)
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
                     
                     Text(q.category.description)
                         .font(.caption)
@@ -447,7 +441,7 @@ struct QuestionDisplayArea: View {
                 .cornerRadius(12)
             }
             
-            // 跟進問題
+            // 跟進問題 (全部顯示)
             if let followUp = followUpQuestion {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -465,31 +459,47 @@ struct QuestionDisplayArea: View {
                     Text(followUp)
                         .font(.subheadline)
                         .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding()
                 .background(Color.orange.opacity(0.1))
                 .cornerRadius(12)
             }
             
+            // AI 錯誤訊息
+            if let error = aiErrorMessage {
+                Text("⚠️ \(error)")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            
             // 回答歷史
             if !questionAnswers.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("已回答 (\(questionAnswers.count)次)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
                     ForEach(0..<questionAnswers.count, id: \.self) { index in
-                        HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text("\(index + 1).")
                                 .font(.caption)
+                                .fontWeight(.bold)
                                 .foregroundColor(.secondary)
+                            
                             Text(questionAnswers[index])
-                                .font(.caption)
-                                .lineLimit(2)
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(8)
+                        .background(Color.blue.opacity(0.05))
+                        .cornerRadius(8)
                     }
                 }
-                .padding(.horizontal)
             }
         }
         .padding(.horizontal)
@@ -635,7 +645,6 @@ struct StatItem: View {
     }
 }
 
-// MARK: - CurrentRecording
 struct CurrentRecording {
     let transcribedText: String
     let audioFeatures: AudioAnalyzer.AudioFeatures?
@@ -667,7 +676,7 @@ struct AudioVisualizerView: View {
     private func barHeight(for index: Int) -> CGFloat {
         guard isRecording else { return 4 }
         
-        let centerIndex = totalBars / 2
+        let centerIndex = barCount / 2
         let distanceFromCenter = abs(index - centerIndex)
         let centerFactor = 1.0 - (Double(distanceFromCenter) / Double(centerIndex)) * 0.5
         let randomFactor = Double.random(in: 0.7...1.3)
@@ -677,7 +686,7 @@ struct AudioVisualizerView: View {
     }
     
     private func barColor(for index: Int) -> Color {
-        let ratio = Double(index) / Double(totalBars)
+        let ratio = Double(index) / Double(barCount)
         if ratio < 0.4 { return .green }
         else if ratio < 0.7 { return .yellow }
         else { return .red }
