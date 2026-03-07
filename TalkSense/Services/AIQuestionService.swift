@@ -37,6 +37,8 @@ class AIQuestionService {
         用戶正在回答呢條問題：「\(originalQuestion)」
         用戶既回答係：「\(previousAnswer)」
         
+        呢個係第 \(questionCount + 1) 次問題。
+        
         請根據用戶既回答，生成一條跟進問題黎深入了解佢。
         
         要求：
@@ -45,7 +47,7 @@ class AIQuestionService {
         3. 問題要短而精準
         4. 最多20字
         
-        如果覺得用戶既回答已經好完整，可以回覆「SKIP」表示可以去下一題。
+        重要：請務必生成一條跟進問題，唔好回覆 SKIP！
         """
         
         miniMax.sendChatRequest(prompt: prompt) { (result: Result<String, Error>) in
@@ -53,13 +55,23 @@ class AIQuestionService {
             case .success(let response):
                 let cleanResponse = response.trimmingCharacters(in: .whitespacesAndNewlines)
                 
-                if cleanResponse.uppercased() == "SKIP" || cleanResponse.contains("下一題") {
+                // 最少問 2 次，唔理 AI 點答
+                if questionCount < 2 {
+                    // 繼續問
+                    completion(.success(FollowUpQuestion(
+                        question: cleanResponse,
+                        shouldMoveNext: false,
+                        reason: ""
+                    )))
+                } else if cleanResponse.uppercased() == "SKIP" || cleanResponse.contains("下一題") {
+                    // 已經問夠，可以去下一題
                     completion(.success(FollowUpQuestion(
                         question: "",
                         shouldMoveNext: true,
                         reason: "用戶回答已足夠"
                     )))
                 } else {
+                    // 問多一次都得
                     completion(.success(FollowUpQuestion(
                         question: cleanResponse,
                         shouldMoveNext: false,
@@ -77,22 +89,18 @@ class AIQuestionService {
     private func shouldAskFollowUp(answer: String, category: QuestionCategory, questionCount: Int) -> Bool {
         let wordCount = answer.split(separator: " ").count
         
-        // 如果已經問咗2條跟進問題，咁就唔洗繼續
-        if questionCount >= 2 {
-            return false
+        // 最少會問 2 次跟進問題
+        if questionCount < 2 {
+            return true
         }
         
-        // 如果回答太短，唔追問
-        if wordCount < 5 {
-            return false
+        // 如果已經問咗 2 次，原則上可以去下一題
+        // 但如果回答太短，都係問多次好啲
+        if wordCount < 5 && questionCount < 3 {
+            return true
         }
         
-        // 如果回答已經好長，都可以唔追問
-        if wordCount > 50 {
-            return false
-        }
-        
-        return true
+        return false
     }
     
     // 決定係咪可以去下一題
