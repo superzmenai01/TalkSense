@@ -161,16 +161,29 @@ class MiniMaxService {
                 // 打印 response (調試用)
                 if let responseString = String(data: data, encoding: .utf8) {
                     print("MiniMax Response: \(responseString)")
-                }
-                
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let choices = json["choices"] as? [[String: Any]],
-                   let firstChoice = choices.first,
-                   let message = firstChoice["message"] as? [String: Any],
-                   let content = message["content"] as? String {
-                    completion(.success(content))
+                    
+                    // 檢查係咪有 error
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if let errorMessage = json["base_resp"] as? [String: Any],
+                           let statusCode = errorMessage["status_code"] as? Int,
+                           statusCode != 0 {
+                            let errorMsg = errorMessage["status_msg"] as? String ?? "Unknown error"
+                            completion(.failure(NSError(domain: "MiniMax", code: statusCode, userInfo: [NSLocalizedDescriptionKey: errorMsg])))
+                            return
+                        }
+                    }
+                    
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let choices = json["choices"] as? [[String: Any]],
+                       let firstChoice = choices.first,
+                       let message = firstChoice["message"] as? [String: Any],
+                       let content = message["content"] as? String {
+                        completion(.success(content))
+                    } else {
+                        completion(.failure(NSError(domain: "MiniMax", code: 4, userInfo: [NSLocalizedDescriptionKey: "Parse error: \(responseString)"])))
+                    }
                 } else {
-                    completion(.failure(NSError(domain: "MiniMax", code: 4, userInfo: [NSLocalizedDescriptionKey: "Parse error"])))
+                    completion(.failure(NSError(domain: "MiniMax", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot decode response"])))
                 }
             }
         }.resume()
