@@ -3,7 +3,7 @@ import Foundation
 class MiniMaxService {
     static let shared = MiniMaxService()
     
-    private let baseURL = "https://api.minimax.chat/v1"
+    private let baseURL = "https://api.minimax.io"
     
     private var apiKey: String {
         get {
@@ -74,11 +74,9 @@ class MiniMaxService {
         - 整體性格總結 (3-4 句)
         """
         
-        // 發送請求並解析
         sendChatRequest(prompt: prompt) { [weak self] result in
             switch result {
             case .success(let response):
-                // 解析 response 獲取分數
                 let analysis = self?.parsePersonalityResponse(response) ?? PersonalityAnalysis(
                     extraversion: 50,
                     stability: 50,
@@ -98,22 +96,12 @@ class MiniMaxService {
     
     // 解析 AI 回覆
     private func parsePersonalityResponse(_ response: String) -> PersonalityAnalysis {
-        // 簡單解析 - 實際應該用更強既方法
-        var extraversion = 50
-        var stability = 50
-        var openness = 50
-        var agreeableness = 50
-        var conscientiousness = 50
-        
-        // 呢度可以用 regex 或者其他方法解析
-        // 暫時用預設值
-        
         return PersonalityAnalysis(
-            extraversion: extraversion,
-            stability: stability,
-            openness: openness,
-            agreeableness: agreeableness,
-            conscientiousness: conscientiousness,
+            extraversion: 50,
+            stability: 50,
+            openness: 50,
+            agreeableness: 50,
+            conscientiousness: 50,
             summary: response,
             timestamp: Date()
         )
@@ -126,7 +114,8 @@ class MiniMaxService {
             return
         }
         
-        guard let url = URL(string: "\(baseURL)/text/chatcompletion") else {
+        // 使用正確既 endpoint 同 model
+        guard let url = URL(string: "\(baseURL)/v1/text/chatcompletion_v2") else {
             completion(.failure(NSError(domain: "MiniMax", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
             return
         }
@@ -136,12 +125,12 @@ class MiniMaxService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
+        // 使用正確既 model 名稱
         let body: [String: Any] = [
-            "model": "abab6.5s",
+            "model": "M2-her",
             "messages": [
                 ["role": "user", "content": prompt]
-            ],
-            "temperature": 0.7
+            ]
         ]
         
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -164,24 +153,25 @@ class MiniMaxService {
                     
                     // 檢查係咪有 error
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        if let errorMessage = json["base_resp"] as? [String: Any],
-                           let statusCode = errorMessage["status_code"] as? Int,
+                        if let baseResp = json["base_resp"] as? [String: Any],
+                           let statusCode = baseResp["status_code"] as? Int,
                            statusCode != 0 {
-                            let errorMsg = errorMessage["status_msg"] as? String ?? "Unknown error"
+                            let errorMsg = baseResp["status_msg"] as? String ?? "Unknown error"
                             completion(.failure(NSError(domain: "MiniMax", code: statusCode, userInfo: [NSLocalizedDescriptionKey: errorMsg])))
+                            return
+                        }
+                        
+                        // 正確既 response 格式
+                        if let choices = json["choices"] as? [[String: Any]],
+                           let firstChoice = choices.first,
+                           let message = firstChoice["message"] as? [String: Any],
+                           let content = message["content"] as? String {
+                            completion(.success(content))
                             return
                         }
                     }
                     
-                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let choices = json["choices"] as? [[String: Any]],
-                       let firstChoice = choices.first,
-                       let message = firstChoice["message"] as? [String: Any],
-                       let content = message["content"] as? String {
-                        completion(.success(content))
-                    } else {
-                        completion(.failure(NSError(domain: "MiniMax", code: 4, userInfo: [NSLocalizedDescriptionKey: "Parse error: \(responseString)"])))
-                    }
+                    completion(.failure(NSError(domain: "MiniMax", code: 4, userInfo: [NSLocalizedDescriptionKey: "Parse error: \(responseString)"])))
                 } else {
                     completion(.failure(NSError(domain: "MiniMax", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot decode response"])))
                 }
