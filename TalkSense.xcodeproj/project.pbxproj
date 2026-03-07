@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0EA48D36C2115B3CA482F7E3 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53D431C6674E025A27C9875A /* NotificationService.swift */; };
+		1E54CAC64A2F76637360D0D8 /* APIKey.txt in Resources */ = {isa = PBXBuildFile; fileRef = 17EDE779D5CBE7205EFE7DB2 /* APIKey.txt */; };
 		3BD504AAFED32D1B816D1FAB /* AudioAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A9F992A86AE9ED81814412 /* AudioAnalyzer.swift */; };
 		40FF74DF4B545D41B27A67DC /* TalkSenseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B73F1B7A2D277CB26A87936 /* TalkSenseApp.swift */; };
 		6913FD8B59182E5DDC37C664 /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFB14742D1A4BD27B7738EA /* RecordView.swift */; };
@@ -25,6 +26,7 @@
 
 /* Begin PBXFileReference section */
 		066A47B701091CE41F4499FF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		17EDE779D5CBE7205EFE7DB2 /* APIKey.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = APIKey.txt; sourceTree = "<group>"; };
 		1B73F1B7A2D277CB26A87936 /* TalkSenseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkSenseApp.swift; sourceTree = "<group>"; };
 		4A7CF1717103D226CF4DD946 /* MiniMaxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniMaxService.swift; sourceTree = "<group>"; };
 		53D431C6674E025A27C9875A /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 		A41B12DB44083D4E9B99FCF7 = {
 			isa = PBXGroup;
 			children = (
+				17EDE779D5CBE7205EFE7DB2 /* APIKey.txt */,
 				F28732BA60902BFB946C1605 /* TalkSense */,
 				DD133C4ADB21B5D56491A660 /* Products */,
 			);
@@ -180,6 +183,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1E54CAC64A2F76637360D0D8 /* APIKey.txt in Resources */,
 				F9989D21F395EF8E70C071A6 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

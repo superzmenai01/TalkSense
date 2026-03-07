@@ -21,6 +21,8 @@ targets:
       - path: TalkSense
         excludes:
           - "**/.DS_Store"
+      - path: APIKey.txt
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.talksense.app
