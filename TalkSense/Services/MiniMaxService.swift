@@ -137,7 +137,7 @@ class MiniMaxService {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
         let body: [String: Any] = [
-            "model": "abab6.5s-chat",
+            "model": "abab6.5s",
             "messages": [
                 ["role": "user", "content": prompt]
             ],
