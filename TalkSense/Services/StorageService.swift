@@ -125,13 +125,22 @@ class StorageService {
         getAllAnalyses().count
     }
     
-    // 計算平均準確率
-    func getAverageAccuracy() -> Double {
+    // 計算累積準確率 (所有錄音既準確率加埋)
+    func getCumulativeAccuracy() -> Double {
         let analyses = getAllAnalyses()
         guard !analyses.isEmpty else { return 0 }
         
+        // 累積加曬所有錄音既 confidence
         let total = analyses.reduce(0.0) { $0 + $1.accuracy }
-        return total / Double(analyses.count)
+        
+        // 如果得1-2次錄音，就直接用
+        // 如果有多次錄音，可以 cap 最高100%
+        return min(1.0, total)
+    }
+    
+    // 兼容舊既 method
+    func getAverageAccuracy() -> Double {
+        return getCumulativeAccuracy()
     }
     
     // 獲取累積既音頻特徵平均值

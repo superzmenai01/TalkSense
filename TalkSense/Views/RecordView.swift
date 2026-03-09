@@ -609,7 +609,7 @@ struct CumulativeStatsView: View {
             
             HStack(spacing: 20) {
                 StatItem(title: "問題數", value: "\(totalRecordings)", icon: "questionmark.circle.fill", color: .blue)
-                StatItem(title: "平均準確率", value: "\(Int(averageAccuracy * 100))%", icon: "percent", color: averageAccuracy >= threshold ? .green : .orange)
+                StatItem(title: "累積準確率", value: "\(Int(averageAccuracy * 100))%", icon: "percent", color: averageAccuracy >= threshold ? .green : .orange)
                 StatItem(title: "總時長", value: "\(Int(totalDuration))秒", icon: "clock.fill", color: .purple)
             }
             

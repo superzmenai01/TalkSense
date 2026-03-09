@@ -173,7 +173,7 @@ struct SummaryStatsView: View {
             
             HStack(spacing: 20) {
                 StatBox(title: "錄音次數", value: "\(analyses.count)", icon: "mic.fill", color: .blue)
-                StatBox(title: "平均準確率", value: "\(Int(averageAccuracy * 100))%", icon: "percent", color: averageAccuracy >= 0.6 ? .green : .orange)
+                StatBox(title: "累積準確率", value: "\(Int(averageAccuracy * 100))%", icon: "percent", color: averageAccuracy >= 0.6 ? .green : .orange)
             }
             
             HStack(spacing: 20) {
