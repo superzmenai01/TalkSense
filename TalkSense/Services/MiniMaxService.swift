@@ -5,19 +5,52 @@ class MiniMaxService {
     
     private let baseURL = "https://api.minimax.io"
     
+    // API Key 會從 UserDefaults 讀取，如果未有既就嘗試從 file 讀取
     private var apiKey: String {
         get {
-            if let savedKey = UserDefaults.standard.string(forKey: "minimax_api_key") {
+            // 首先 check UserDefaults
+            if let savedKey = UserDefaults.standard.string(forKey: "minimax_api_key"), !savedKey.isEmpty {
                 return savedKey
             }
-            return ""
+            
+            // 如果 UserDefaults 冇，嘗試從 file 讀取 (只讀一次)
+            if apiKeyFromFile == nil {
+                apiKeyFromFile = loadAPIKeyFromBundle()
+            }
+            
+            return apiKeyFromFile ?? ""
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "minimax_api_key")
+            apiKeyFromFile = newValue // Cache 埋
         }
     }
     
-    private init() {}
+    // Cache for file-loaded key
+    private static var apiKeyFromFile: String?
+    
+    private init() {
+        // Init 既時候嘗試 load
+        _ = apiKey
+    }
+    
+    // 從 Bundle 讀取 API Key
+    private func loadAPIKeyFromBundle() -> String? {
+        guard let path = Bundle.main.path(forResource: "APIKey", ofType: "txt") else {
+            print("APIKey.txt not found in bundle")
+            return nil
+        }
+        
+        do {
+            let key = try String(contentsOfFile: path, encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            print("Loaded API Key from bundle: \(key.prefix(10))...")
+            return key
+        } catch {
+            print("Failed to load API Key: \(error)")
+            return nil
+        }
+    }
     
     var isConfigured: Bool {
         !apiKey.isEmpty
@@ -28,7 +61,8 @@ class MiniMaxService {
     }
     
     func clearAPIKey() {
-        apiKey = ""
+        UserDefaults.standard.removeObject(forKey: "minimax_api_key")
+        MiniMaxService.apiKeyFromFile = nil
     }
     
     // 性格分析
@@ -114,7 +148,8 @@ class MiniMaxService {
             return
         }
         
-        // 使用正確既 endpoint 同 model
+        print("Sending request with API key: \(apiKey.prefix(10))...")
+        
         guard let url = URL(string: "\(baseURL)/v1/text/chatcompletion_v2") else {
             completion(.failure(NSError(domain: "MiniMax", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
             return
@@ -125,7 +160,6 @@ class MiniMaxService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
-        // 使用正確既 model 名稱
         let body: [String: Any] = [
             "model": "M2-her",
             "messages": [
@@ -147,11 +181,9 @@ class MiniMaxService {
                     return
                 }
                 
-                // 打印 response (調試用)
                 if let responseString = String(data: data, encoding: .utf8) {
                     print("MiniMax Response: \(responseString)")
                     
-                    // 檢查係咪有 error
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                         if let baseResp = json["base_resp"] as? [String: Any],
                            let statusCode = baseResp["status_code"] as? Int,
@@ -161,7 +193,6 @@ class MiniMaxService {
                             return
                         }
                         
-                        // 正確既 response 格式
                         if let choices = json["choices"] as? [[String: Any]],
                            let firstChoice = choices.first,
                            let message = firstChoice["message"] as? [String: Any],
