@@ -3,7 +3,7 @@ import Foundation
 class MiniMaxService {
     static let shared = MiniMaxService()
     
-    private let baseURL = "https://api.minimax.chat"
+    private let baseURL = "https://api.moonshot.cn"
     
     // API Key 會從 UserDefaults 讀取，如果未有既就嘗試從 file 讀取
     private var apiKey: String {
@@ -150,8 +150,9 @@ class MiniMaxService {
         
         print("Sending request with API key: \(apiKey.prefix(10))...")
         
-        guard let url = URL(string: "\(baseURL)/v1/text/chatcompletion_v2") else {
-            completion(.failure(NSError(domain: "MiniMax", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+        // 使用 Kimi API
+        guard let url = URL(string: "\(baseURL)/v1/chat/completions") else {
+            completion(.failure(NSError(domain: "Kimi", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
             return
         }
         
@@ -160,11 +161,13 @@ class MiniMaxService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         
+        // Kimi model
         let body: [String: Any] = [
-            "model": "M2-her",
+            "model": "moonshot-v1-8k",
             "messages": [
                 ["role": "user", "content": prompt]
-            ]
+            ],
+            "temperature": 0.7
         ]
         
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -177,22 +180,22 @@ class MiniMaxService {
                 }
                 
                 guard let data = data else {
-                    completion(.failure(NSError(domain: "MiniMax", code: 2, userInfo: [NSLocalizedDescriptionKey: "No data"])))
+                    completion(.failure(NSError(domain: "Kimi", code: 2, userInfo: [NSLocalizedDescriptionKey: "No data"])))
                     return
                 }
                 
                 if let responseString = String(data: data, encoding: .utf8) {
-                    print("MiniMax Response: \(responseString)")
+                    print("Kimi Response: \(responseString)")
                     
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        if let baseResp = json["base_resp"] as? [String: Any],
-                           let statusCode = baseResp["status_code"] as? Int,
-                           statusCode != 0 {
-                            let errorMsg = baseResp["status_msg"] as? String ?? "Unknown error"
-                            completion(.failure(NSError(domain: "MiniMax", code: statusCode, userInfo: [NSLocalizedDescriptionKey: errorMsg])))
+                        // Check for error
+                        if let errorObj = json["error"] as? [String: Any],
+                           let message = errorObj["message"] as? String {
+                            completion(.failure(NSError(domain: "Kimi", code: 3, userInfo: [NSLocalizedDescriptionKey: message])))
                             return
                         }
                         
+                        // Success
                         if let choices = json["choices"] as? [[String: Any]],
                            let firstChoice = choices.first,
                            let message = firstChoice["message"] as? [String: Any],
@@ -202,9 +205,9 @@ class MiniMaxService {
                         }
                     }
                     
-                    completion(.failure(NSError(domain: "MiniMax", code: 4, userInfo: [NSLocalizedDescriptionKey: "Parse error: \(responseString)"])))
+                    completion(.failure(NSError(domain: "Kimi", code: 4, userInfo: [NSLocalizedDescriptionKey: "Parse error: \(responseString)"])))
                 } else {
-                    completion(.failure(NSError(domain: "MiniMax", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot decode response"])))
+                    completion(.failure(NSError(domain: "Kimi", code: 5, userInfo: [NSLocalizedDescriptionKey: "Cannot decode response"])))
                 }
             }
         }.resume()
