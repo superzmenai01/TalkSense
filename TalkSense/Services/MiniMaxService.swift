@@ -3,7 +3,7 @@ import Foundation
 class MiniMaxService {
     static let shared = MiniMaxService()
     
-    private let baseURL = "https://api.minimax.io"
+    private let baseURL = "https://api.minimax.chat"
     
     // API Key 會從 UserDefaults 讀取，如果未有既就嘗試從 file 讀取
     private var apiKey: String {
