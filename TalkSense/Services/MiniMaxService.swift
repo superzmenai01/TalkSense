@@ -14,20 +14,20 @@ class MiniMaxService {
             }
             
             // 如果 UserDefaults 冇，嘗試從 file 讀取 (只讀一次)
-            if apiKeyFromFile == nil {
-                apiKeyFromFile = loadAPIKeyFromBundle()
+            if MiniMaxService.cachedAPIKey == nil {
+                MiniMaxService.cachedAPIKey = loadAPIKeyFromBundle()
             }
             
-            return apiKeyFromFile ?? ""
+            return MiniMaxService.cachedAPIKey ?? ""
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "minimax_api_key")
-            apiKeyFromFile = newValue // Cache 埋
+            MiniMaxService.cachedAPIKey = newValue // Cache 埋
         }
     }
     
     // Cache for file-loaded key
-    private static var apiKeyFromFile: String?
+    private static var cachedAPIKey: String?
     
     private init() {
         // Init 既時候嘗試 load
@@ -62,7 +62,7 @@ class MiniMaxService {
     
     func clearAPIKey() {
         UserDefaults.standard.removeObject(forKey: "minimax_api_key")
-        MiniMaxService.apiKeyFromFile = nil
+        MiniMaxService.cachedAPIKey = nil
     }
     
     // 性格分析
