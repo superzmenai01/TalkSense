@@ -116,6 +116,28 @@ struct PersonalityResultView: View {
                             Spacer(minLength: 40)
                         }
                     }
+                } else {
+                    // 結果為空既情況
+                    VStack(spacing: 20) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.secondary)
+                        
+                        Text("暫無分析結果")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Text("請確保已有足夠既錄音數據")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                        
+                        Button("關閉") {
+                            onDismiss()
+                        }
+                        .padding(.top, 20)
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)

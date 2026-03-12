@@ -153,8 +153,30 @@ struct RecordView: View {
                             }
                         }
                         
+                        // 性格分析 loading 狀態
+                        if isAnalyzing {
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .scaleEffect(1.5)
+                                
+                                Text("性格分析中...")
+                                    .font(.headline)
+                                    .foregroundColor(.blue)
+                                
+                                Text("請稍候，AI 正在分析你既錄音數據")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(40)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(12)
+                            .padding(.horizontal, 40)
+                        }
+                        
                         // 正常既分析按鈕
-                        if !isRecording && !isProcessing && !isAIThinking && totalRecordings > 0 && !showNextQuestionPrompt {
+                        else if !isRecording && !isProcessing && !isAIThinking && totalRecordings > 0 && !showNextQuestionPrompt {
                             VStack(spacing: 12) {
                                 Button(action: {
                                     performAnalysis()
@@ -395,7 +417,12 @@ struct RecordView: View {
         // 獲取所有儲存既分析數據
         let allAnalyses = storage.getAllAnalyses()
         
-        guard !allAnalyses.isEmpty else { return }
+        guard !allAnalyses.isEmpty else {
+            // 冇數據，顯示提示
+            analysisError = "暫無錄音數據，請先進行錄音"
+            showPersonalityResult = true
+            return
+        }
         
         // 設置加載狀態
         isAnalyzing = true
