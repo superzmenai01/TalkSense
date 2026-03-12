@@ -384,34 +384,27 @@ struct RecordView: View {
         let transcripts = allAnalyses.map { $0.transcribedText }
         let audioFeatures = allAnalyses.map { $0.audioFeatures }
         
-        // 調用 Kimi API 做性格分析
-        MiniMaxService.shared.analyzePersonality(
-            transcripts: transcripts,
-            audioFeatures: audioFeatures
-        ) { [weak self] result in
-            switch result {
-            case .success(let analysis):
-                print("性格分析完成: \(analysis.summary)")
-                // 可以顯示結果或者儲存
-                self?.showPersonalityResult(analysis)
-            case .failure(let error):
+        // 調用 Kimi API 做性格分析 (非同步)
+        Task {
+            do {
+                let analysis = try await MiniMaxService.shared.analyzePersonalityAsync(
+                    transcripts: transcripts,
+                    audioFeatures: audioFeatures
+                )
+                print("""
+                === 性格分析結果 ===
+                外向性: \(analysis.extraversion)
+                穩定性: \(analysis.stability)
+                開放性: \(analysis.openness)
+                親和性: \(analysis.agreeableness)
+                責任感: \(analysis.conscientiousness)
+                
+                總結: \(analysis.summary)
+                """)
+            } catch {
                 print("性格分析失敗: \(error)")
             }
         }
-    }
-    
-    private func showPersonalityResult(_ analysis: PersonalityAnalysis) {
-        // 呢度可以加一個彈出或者新既 view 顯示結果
-        print("""
-        === 性格分析結果 ===
-        外向性: \(analysis.extraversion)
-        穩定性: \(analysis.stability)
-        開放性: \(analysis.openness)
-        親和性: \(analysis.agreeableness)
-        責任感: \(analysis.conscientiousness)
-        
-        總結: \(analysis.summary)
-        """)
     }
     
     private func formatTime(_ time: TimeInterval) -> String {

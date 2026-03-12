@@ -128,6 +128,18 @@ class MiniMaxService {
         }
     }
     
+    // 性格分析 (Async 版本)
+    func analyzePersonalityAsync(
+        transcripts: [String],
+        audioFeatures: [AudioFeaturesData]
+    ) async throws -> PersonalityAnalysis {
+        return try await withCheckedThrowingContinuation { continuation in
+            analyzePersonality(transcripts: transcripts, audioFeatures: audioFeatures) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+    
     // 解析 AI 回覆
     private func parsePersonalityResponse(_ response: String) -> PersonalityAnalysis {
         return PersonalityAnalysis(
