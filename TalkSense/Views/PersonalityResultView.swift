@@ -1,5 +1,7 @@
 
 
+import SwiftUI
+
 // MARK: - 性格分析結果顯示視圖
 struct PersonalityResultView: View {
     let result: PersonalityAnalysis?

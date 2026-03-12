@@ -239,6 +239,17 @@ struct RecordView: View {
                 Text("所有數據已經清除，你可以重新開始錄音喇！")
             }
         }
+        .sheet(isPresented: $showPersonalityResult) {
+            PersonalityResultView(
+                result: personalityResult,
+                isAnalyzing: isAnalyzing,
+                errorMessage: analysisError,
+                onDismiss: {
+                    showPersonalityResult = false
+                    personalityResult = nil
+                }
+            )
+        }
     }
     
     private var buttonLabel: String {
@@ -434,17 +445,6 @@ struct RecordView: View {
             }
         }
         timer.resume()
-    }
-    .sheet(isPresented: $showPersonalityResult) {
-        PersonalityResultView(
-            result: personalityResult,
-            isAnalyzing: isAnalyzing,
-            errorMessage: analysisError,
-            onDismiss: {
-                showPersonalityResult = false
-                personalityResult = nil
-            }
-        )
     }
 }
 
