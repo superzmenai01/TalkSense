@@ -29,6 +29,12 @@ struct RecordView: View {
     @State private var showResetConfirmation: Bool = false
     @State private var showResetSuccess: Bool = false
     
+    // 性格分析
+    @State private var isAnalyzing: Bool = false
+    @State private var personalityResult: PersonalityAnalysis?
+    @State private var showPersonalityResult: Bool = false
+    @State private var analysisError: String?
+    
     @Environment(\.dismiss) private var dismiss
     
     private let audioRecorder = AudioRecorder()
@@ -380,6 +386,10 @@ struct RecordView: View {
         
         guard !allAnalyses.isEmpty else { return }
         
+        // 設置加載狀態
+        isAnalyzing = true
+        analysisError = nil
+        
         // 準備數據
         let transcripts = allAnalyses.map { $0.transcribedText }
         let audioFeatures = allAnalyses.map { $0.audioFeatures }
@@ -391,18 +401,16 @@ struct RecordView: View {
                     transcripts: transcripts,
                     audioFeatures: audioFeatures
                 )
-                print("""
-                === 性格分析結果 ===
-                外向性: \(analysis.extraversion)
-                穩定性: \(analysis.stability)
-                開放性: \(analysis.openness)
-                親和性: \(analysis.agreeableness)
-                責任感: \(analysis.conscientiousness)
-                
-                總結: \(analysis.summary)
-                """)
+                await MainActor.run {
+                    self.personalityResult = analysis
+                    self.isAnalyzing = false
+                    self.showPersonalityResult = true
+                }
             } catch {
-                print("性格分析失敗: \(error)")
+                await MainActor.run {
+                    self.analysisError = error.localizedDescription
+                    self.isAnalyzing = false
+                }
             }
         }
     }
@@ -426,6 +434,17 @@ struct RecordView: View {
             }
         }
         timer.resume()
+    }
+    .sheet(isPresented: $showPersonalityResult) {
+        PersonalityResultView(
+            result: personalityResult,
+            isAnalyzing: isAnalyzing,
+            errorMessage: analysisError,
+            onDismiss: {
+                showPersonalityResult = false
+                personalityResult = nil
+            }
+        )
     }
 }
 
